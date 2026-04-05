@@ -39,6 +39,11 @@ func main() {
 
 	r := gin.Default()
 
+	// Health check for Render
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+
 	// Public routes
 	r.POST("/signup", handler.HandleSignup)
 	r.POST("/login", handler.HandleLogin)
@@ -56,6 +61,8 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("Server starting on port %s", port)
-	r.Run(":" + port)
+	// Explicitly bind to 0.0.0.0 for Render compatibility
+	addr := "0.0.0.0:" + port
+	log.Printf("Server starting on %s", addr)
+	r.Run(addr)
 }
