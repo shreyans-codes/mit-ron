@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/constants/api_constants.dart';
 import '../models/auth_session.dart';
 import '../models/auth_user.dart';
 import 'auth_exception.dart';
@@ -10,7 +11,6 @@ class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
 
-  static const String _baseUrl = 'http://localhost:8080'; // Update for production/mobile
   static const String _tokenKey = 'auth_token';
   static const String _userKey = 'auth_user';
 
@@ -32,7 +32,7 @@ class AuthService {
 
   Future<AuthSession> login(String email, String password) async {
     final response = await http.post(
-      Uri.parse('$_baseUrl/login'),
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.login}'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password}),
     );
@@ -50,7 +50,7 @@ class AuthService {
 
   Future<AuthSession> signUp(String email, String password) async {
     final response = await http.post(
-      Uri.parse('$_baseUrl/signup'),
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.signup}'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password}),
     );
@@ -69,7 +69,7 @@ class AuthService {
   Future<void> logout() async {
     if (_token != null) {
       await http.post(
-        Uri.parse('$_baseUrl/signout'),
+        Uri.parse('${ApiConstants.baseUrl}${ApiConstants.signout}'),
         headers: {'Authorization': 'Bearer $_token'},
       );
     }
@@ -79,7 +79,7 @@ class AuthService {
   Future<AuthUser> updateProfile({String? displayName, File? avatar}) async {
     if (_token == null) throw AuthException('Not authenticated');
 
-    var request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/profile/update'));
+    var request = http.MultipartRequest('POST', Uri.parse('${ApiConstants.baseUrl}${ApiConstants.profileUpdate}'));
     request.headers['Authorization'] = 'Bearer $_token';
     
     if (displayName != null) {
