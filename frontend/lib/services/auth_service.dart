@@ -25,6 +25,11 @@ class AuthService {
   AuthUser? _currentUser;
 
   String? get token => _token;
+
+  /// Exact value sent as the `Authorization` HTTP header (e.g. `Bearer eyJ...`).
+  String? get authorizationHeaderValue =>
+      _token == null ? null : 'Bearer ${_token!.trim()}';
+
   AuthUser? get currentUser => _currentUser;
   bool get isAuthenticated => _token != null;
 
@@ -78,7 +83,7 @@ class AuthService {
       try {
         await http.post(
           Uri.parse('${ApiConstants.baseUrl}${ApiConstants.signout}'),
-          headers: {'Authorization': 'Bearer $_token'},
+          headers: {'Authorization': 'Bearer ${_token!.trim()}'},
         );
       } catch (e) {
         developer.log('Logout API call failed: $e');
@@ -92,7 +97,7 @@ class AuthService {
     if (_token == null) throw AuthException('Not authenticated');
 
     var request = http.MultipartRequest('POST', Uri.parse('${ApiConstants.baseUrl}${ApiConstants.profileUpdate}'));
-    request.headers['Authorization'] = 'Bearer $_token';
+    request.headers['Authorization'] = 'Bearer ${_token!.trim()}';
 
     if (displayName != null) {
       request.fields['display_name'] = displayName;
@@ -141,7 +146,7 @@ class AuthService {
 
     final response = await http.get(
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.userSearch}?q=$query'),
-      headers: {'Authorization': 'Bearer $_token'},
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
 
     if (response.statusCode == 200) {
@@ -160,7 +165,7 @@ class AuthService {
 
     final response = await http.get(
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.profile}/$username'),
-      headers: {'Authorization': 'Bearer $_token'},
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
 
     if (response.statusCode == 200) {
@@ -178,7 +183,7 @@ class AuthService {
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.addFriend}'),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_token',
+        'Authorization': 'Bearer ${_token!.trim()}',
       },
       body: jsonEncode({'friend_username': friendUsername}),
     );
@@ -196,7 +201,7 @@ class AuthService {
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.createGroup}'),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_token',
+        'Authorization': 'Bearer ${_token!.trim()}',
       },
       body: jsonEncode({'name': name, 'description': description}),
     );
@@ -216,7 +221,7 @@ class AuthService {
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.joinGroup}'),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_token',
+        'Authorization': 'Bearer ${_token!.trim()}',
       },
       body: jsonEncode({'group_id': groupId}),
     );
@@ -237,7 +242,7 @@ class AuthService {
 
     final response = await http.get(
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.myGroups}'),
-      headers: {'Authorization': 'Bearer $_token'},
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
 
     if (response.statusCode == 200) {
@@ -258,7 +263,7 @@ class AuthService {
     // TODO: Implement backend endpoint and logic for fetching friends
     // final response = await http.get(
     //   Uri.parse('${ApiConstants.baseUrl}${ApiConstants.friendsList}'), // Assuming this endpoint exists
-    //   headers: {'Authorization': 'Bearer $_token'},
+    //   headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     // );
     // if (response.statusCode == 200) {
     //   final List<dynamic> data = jsonDecode(response.body);

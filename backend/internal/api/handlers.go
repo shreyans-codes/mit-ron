@@ -288,15 +288,18 @@ func (h *Handler) HandleGetMyGroups(c *gin.Context) {
 
 // Helper functions
 func (h *Handler) getUserIDFromToken(token string) (string, error) {
+	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", errors.New("authorization token missing")
 	}
-	// Assuming token is in "Bearer <token>" format
-	parts := strings.Split(token, " ")
-	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+	// AuthMiddleware stores the raw JWT after stripping "Bearer ".
+	// Accept optional "Bearer " prefix for callers that pass the full header value.
+	if len(token) >= 7 && strings.EqualFold(token[:7], "bearer ") {
+		token = strings.TrimSpace(token[7:])
+	}
+	if token == "" {
 		return "", errors.New("invalid authorization format")
 	}
-	token = parts[1]
 
 	user, err := h.auth.GetUserFromToken(token)
 	if err != nil {
