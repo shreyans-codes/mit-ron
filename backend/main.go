@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5" // Import pgx
+	"github.com/joho/godotenv"
 	"github.com/mitron/backend/internal/api"
 	"github.com/mitron/backend/internal/auth"
 	"github.com/mitron/backend/internal/middleware"
@@ -36,9 +38,9 @@ func main() {
 	defer conn.Close(context.Background()) // Ensure connection is closed
 
 	// Initialize modular components
-	authenticator := auth.NewPostgresAuthenticator(dbURL, jwtSecret) // This should now use conn
-	if authenticator == nil { // Check if authenticator initialization itself failed (e.g., invalid secret)
-		log.Fatal("Failed to initialize authenticator")
+	authenticator, err := auth.NewPostgresAuthenticator(dbURL, jwtSecret) // This should now use conn
+	if err != nil {
+		log.Fatalf("Failed to initialize authenticator: %v", err)
 	}
 	defer authenticator.Close() // Ensure authenticator's connection is closed
 

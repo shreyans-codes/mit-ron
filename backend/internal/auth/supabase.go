@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"github.com/mitron/backend/internal/models"
 	"github.com/supabase-community/gotrue-go"
 	"github.com/supabase-community/gotrue-go/types"
@@ -16,10 +17,13 @@ func NewSupabaseAuthenticator(url, anonKey string) *SupabaseAuthenticator {
 	}
 }
 
-func (s *SupabaseAuthenticator) Signup(email, password string) (*models.AuthResponse, error) {
+func (s *SupabaseAuthenticator) Signup(username, email, password string) (*models.AuthResponse, error) {
 	resp, err := s.client.Signup(types.SignupRequest{
 		Email:    email,
 		Password: password,
+		Data: map[string]interface{}{
+			"username": username,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -28,8 +32,9 @@ func (s *SupabaseAuthenticator) Signup(email, password string) (*models.AuthResp
 	return &models.AuthResponse{
 		AccessToken: resp.AccessToken,
 		User: models.User{
-			ID:    resp.User.ID.String(),
-			Email: resp.User.Email,
+			ID:       resp.User.ID.String(),
+			Email:    resp.User.Email,
+			Username: username,
 		},
 	}, nil
 }
@@ -76,4 +81,32 @@ func (s *SupabaseAuthenticator) GetUserFromToken(token string) (*models.User, er
 		ID:    user.ID.String(),
 		Email: user.Email,
 	}, nil
+}
+
+func (s *SupabaseAuthenticator) GetUserByUsername(username string) (*models.User, error) {
+	return nil, errors.New("method not implemented for supabase")
+}
+
+func (s *SupabaseAuthenticator) SearchUsers(query string) ([]models.Profile, error) {
+	return nil, errors.New("method not implemented for supabase")
+}
+
+func (s *SupabaseAuthenticator) AddFriend(userID, friendID string) error {
+	return errors.New("method not implemented for supabase")
+}
+
+func (s *SupabaseAuthenticator) CreateGroup(name, description, creatorID string) (*models.Group, error) {
+	return nil, errors.New("method not implemented for supabase")
+}
+
+func (s *SupabaseAuthenticator) JoinGroup(groupID, userID string) error {
+	return errors.New("method not implemented for supabase")
+}
+
+func (s *SupabaseAuthenticator) GetMyGroups(userID string) ([]models.Group, error) {
+	return nil, errors.New("method not implemented for supabase")
+}
+
+func (s *SupabaseAuthenticator) GetProfile(username string) (*models.Profile, error) {
+	return nil, errors.New("method not implemented for supabase")
 }
