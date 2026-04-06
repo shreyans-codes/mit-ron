@@ -36,12 +36,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to parse DATABASE_URL: %v", err)
 	}
-	// PgBouncer transaction mode (e.g. Supabase pooler :6543) cannot reliably use
-	// server-side prepared statements; pgx may error with "conn busy" when
-	// deallocating them. Simple protocol avoids prepares and works with poolers.
-	// Direct Postgres (:5432) also works fine with this; overhead is small for typical APIs.
+
+	// pgx v5 uses StatementCacheCapacity / DefaultQueryExecMode, not MaxPreparedStatements.
+	// Transaction poolers (e.g. Supabase :6543, PgBouncer) break named prepared statements
+	// (stmtcache_*), which surfaces as SQLSTATE 42P05 "already exists".
 	if useSimplePostgresProtocol(dbURL) {
 		poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+		poolConfig.ConnConfig.StatementCacheCapacity = 0
+		poolConfig.ConnConfig.DescriptionCacheCapacity = 0
 		log.Println("Using PostgreSQL simple query protocol (recommended for transaction poolers / Supabase pooler)")
 	}
 
@@ -125,4 +127,3 @@ func useSimplePostgresProtocol(dbURL string) bool {
 		strings.Contains(u, "pgbouncer=true") ||
 		strings.Contains(u, ":6543/")
 }
-
