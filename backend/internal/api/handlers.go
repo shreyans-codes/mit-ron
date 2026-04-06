@@ -8,11 +8,12 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5" // Import pgx
 	"github.com/mitron/backend/internal/auth"
 	"github.com/mitron/backend/internal/models"
 	"github.com/mitron/backend/internal/storage"
@@ -21,7 +22,7 @@ import (
 type Handler struct {
 	auth    auth.Authenticator
 	storage storage.StorageProvider
-	conn    *pgx.Conn // Assuming conn is passed or accessible for handlers if needed directly
+	conn    *pgx.Conn // Added conn to Handler
 }
 
 func NewHandler(a auth.Authenticator, s storage.StorageProvider, conn *pgx.Conn) *Handler { // Added conn parameter
@@ -29,8 +30,8 @@ func NewHandler(a auth.Authenticator, s storage.StorageProvider, conn *pgx.Conn)
 }
 
 type AuthRequest struct {
-	Email    string `json:"email" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	LoginIdentifier string `json:"login_identifier" binding:"required"` // Combined email/username
+	Password        string `json:"password" binding:"required"`
 }
 
 type SignupRequest struct {
@@ -62,9 +63,8 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.auth.Login(req.Email, req.Password) // This should now accept loginIdentifier (email or username)
+	resp, err := h.auth.Login(req.LoginIdentifier, req.Password) // Use loginIdentifier
 	if err != nil {
-		// Use a generic message for security, avoid revealing if it's email or password
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid login credentials"})
 		return
 	}
@@ -86,10 +86,9 @@ func (h *Handler) HandleSignout(c *gin.Context) {
 func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 	token := c.GetString("token")
 
-	// Handle file upload for avatar
 	file, err := c.FormFile("avatar")
 	var avatarURL string
-	if err == nil { // Proceed only if file is present and no error during FormFile retrieval
+	if err == nil {
 		openedFile, err := file.Open()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
@@ -104,7 +103,6 @@ func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 		}
 
 		fileName := fmt.Sprintf("%d_%s", SystemTimeNow(), filepath.Base(file.Filename))
-		// Ensure storage provider is initialized and available
 		if h.storage == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Storage provider not initialized"})
 			return
@@ -115,13 +113,12 @@ func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 			return
 		}
 	} else if !errors.Is(err, http.ErrMissingFile) {
-		// Log or handle other errors from c.FormFile, but ignore if file was just not provided
 		log.Printf("Error retrieving avatar file: %v", err)
 	}
 
 	displayName := c.PostForm("display_name")
 	bio := c.PostForm("bio")
-	username := c.PostForm("username") // Also allow username update
+	username := c.PostForm("username")
 
 	updateData := map[string]interface{}{}
 	if displayName != "" {
@@ -136,7 +133,6 @@ func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 	if username != "" {
 		updateData["username"] = username
 	}
-
 
 	if len(updateData) > 0 {
 		user, err := h.auth.UpdateUser(token, updateData)
@@ -205,7 +201,6 @@ func (h *Handler) HandleAddFriend(c *gin.Context) {
 		return
 	}
 
-	// Use the GetUserByUsername method from the authenticator
 	friendUser, err := h.auth.GetUserByUsername(req.FriendUsername)
 	if err != nil {
 		if errors.Is(err, errors.New("user not found")) {

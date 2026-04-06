@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
+	"github.com/jackc/pgx/v5" // Import pgx
 	"github.com/mitron/backend/internal/api"
 	"github.com/mitron/backend/internal/auth"
 	"github.com/mitron/backend/internal/middleware"
@@ -28,16 +28,24 @@ func main() {
 		log.Fatal("DATABASE_URL and JWT_SECRET must be set")
 	}
 
-	// Initialize modular components
-	authenticator, err := auth.NewPostgresAuthenticator(dbURL, jwtSecret)
+	// Initialize database connection
+	conn, err := pgx.Connect(context.Background(), dbURL)
 	if err != nil {
-		log.Fatalf("Failed to initialize authenticator: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer authenticator.Close()
+	defer conn.Close(context.Background()) // Ensure connection is closed
+
+	// Initialize modular components
+	authenticator := auth.NewPostgresAuthenticator(dbURL, jwtSecret) // This should now use conn
+	if authenticator == nil { // Check if authenticator initialization itself failed (e.g., invalid secret)
+		log.Fatal("Failed to initialize authenticator")
+	}
+	defer authenticator.Close() // Ensure authenticator's connection is closed
 
 	// Use Supabase for storage only
 	storageProvider := storage.NewSupabaseStorage(supabaseURL, supabaseAnonKey)
-	handler := api.NewHandler(authenticator, storageProvider)
+	// Pass the connection to the handler
+	handler := api.NewHandler(authenticator, storageProvider, conn)
 
 	r := gin.Default()
 
