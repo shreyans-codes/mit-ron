@@ -6,18 +6,18 @@ type User struct {
 	ID          string    `json:"id"`
 	Email       string    `json:"email"`
 	Username    string    `json:"username"`
-	DisplayName string    `json:"display_name"`
-	AvatarURL   string    `json:"avatar_url"`
-	Bio         string    `json:"bio"`
+	DisplayName *string   `json:"display_name"`
+	AvatarURL   *string   `json:"avatar_url"`
+	Bio         *string   `json:"bio"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
 type Profile struct {
-	ID          string `json:"id"`
-	Username    string `json:"username"`
-	DisplayName string `json:"display_name"`
-	AvatarURL   string `json:"avatar_url"`
-	Bio         string `json:"bio"`
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	DisplayName *string `json:"display_name"`
+	AvatarURL   *string `json:"avatar_url"`
+	Bio         *string `json:"bio"`
 }
 
 type AuthResponse struct {
@@ -34,7 +34,7 @@ type Friend struct {
 type Group struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
-	Description string    `json:"description"`
+	Description *string   `json:"description"`
 	CreatorID   string    `json:"creator_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	MemberCount int       `json:"member_count"`

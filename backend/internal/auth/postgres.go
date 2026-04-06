@@ -32,8 +32,10 @@ func NewPostgresAuthenticator(dbURL, jwtSecret string) (*PostgresAuthenticator, 
 }
 
 func (p *PostgresAuthenticator) Signup(username, email, password string) (*models.AuthResponse, error) {
+	log.Printf("Signup attempt for username=%s, email=%s", username, email)
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
+		log.Printf("Bcrypt error during signup: %v", err)
 		return nil, err
 	}
 
@@ -43,11 +45,14 @@ func (p *PostgresAuthenticator) Signup(username, email, password string) (*model
 		username, email, string(hashedPassword)).Scan(&userID)
 
 	if err != nil {
+		log.Printf("Database error during signup: %v", err)
 		return nil, fmt.Errorf("could not create user: %v", err)
 	}
 
+	log.Printf("User created successfully: %s", userID)
 	token, err := p.generateToken(userID)
 	if err != nil {
+		log.Printf("Token generation error during signup: %v", err)
 		return nil, err
 	}
 
@@ -73,7 +78,9 @@ func (p *PostgresAuthenticator) Signup(username, email, password string) (*model
 }
 
 func (p *PostgresAuthenticator) Login(loginIdentifier, password string) (*models.AuthResponse, error) {
-	var userID, hashedPassword, email, username string
+	log.Printf("Login attempt for identifier=%s", loginIdentifier)
+	var userID, hashedPassword, email string
+	var username *string
 	var err error
 
 	// Try to find user by email first, then by username
@@ -83,27 +90,34 @@ func (p *PostgresAuthenticator) Login(loginIdentifier, password string) (*models
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			log.Printf("User not found by email, trying username for %s", loginIdentifier)
 			// If not found by email, try by username
 			err = p.conn.QueryRow(context.Background(),
 				"SELECT id, email, username, password_hash FROM users WHERE username = $1",
 				loginIdentifier).Scan(&userID, &email, &username, &hashedPassword)
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
+					log.Printf("User not found by email or username: %s", loginIdentifier)
 					return nil, errors.New("user not found")
 				}
+				log.Printf("Database error during login (username query): %v", err)
 				return nil, fmt.Errorf("database error: %v", err)
 			}
 		} else {
+			log.Printf("Database error during login (email query): %v", err)
 			return nil, fmt.Errorf("database error: %v", err)
 		}
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password)); err != nil {
+		log.Printf("Invalid credentials for user: %s", loginIdentifier)
 		return nil, errors.New("invalid credentials")
 	}
 
+	log.Printf("Login successful for user: %s", userID)
 	token, err := p.generateToken(userID)
 	if err != nil {
+		log.Printf("Token generation error during login: %v", err)
 		return nil, err
 	}
 
@@ -116,7 +130,7 @@ func (p *PostgresAuthenticator) Login(loginIdentifier, password string) (*models
 			User: models.User{
 				ID:       userID,
 				Email:    email,
-				Username: username,
+				Username: stringValue(username),
 			},
 		}, nil
 	}
@@ -488,6 +502,14 @@ func isValidUsername(username string) bool {
 		}
 	}
 	return true
+}
+
+// Helper to handle optional string pointer
+func stringValue(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func (p *PostgresAuthenticator) Close() {
