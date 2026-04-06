@@ -4,11 +4,13 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5" // Import pgx
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/mitron/backend/internal/api"
 	"github.com/mitron/backend/internal/auth"
@@ -30,24 +32,32 @@ func main() {
 		log.Fatal("DATABASE_URL and JWT_SECRET must be set")
 	}
 
-	// Initialize database connection
-	conn, err := pgx.Connect(context.Background(), dbURL)
+	poolConfig, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("Failed to parse DATABASE_URL: %v", err)
 	}
-	defer conn.Close(context.Background()) // Ensure connection is closed
+	// PgBouncer transaction mode (e.g. Supabase pooler :6543) cannot reliably use
+	// server-side prepared statements; pgx may error with "conn busy" when
+	// deallocating them. Simple protocol avoids prepares and works with poolers.
+	// Direct Postgres (:5432) also works fine with this; overhead is small for typical APIs.
+	if useSimplePostgresProtocol(dbURL) {
+		poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+		log.Println("Using PostgreSQL simple query protocol (recommended for transaction poolers / Supabase pooler)")
+	}
 
-	// Initialize modular components
-	authenticator, err := auth.NewPostgresAuthenticator(conn, jwtSecret) // Pass existing conn
+	dbPool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
+	if err != nil {
+		log.Fatalf("Failed to create database pool: %v", err)
+	}
+	defer dbPool.Close()
+
+	authenticator, err := auth.NewPostgresAuthenticator(dbPool, jwtSecret)
 	if err != nil {
 		log.Fatalf("Failed to initialize authenticator: %v", err)
 	}
-	defer authenticator.Close() // Ensure authenticator's connection is closed
 
-	// Use Supabase for storage only
 	storageProvider := storage.NewSupabaseStorage(supabaseURL, supabaseAnonKey)
-	// Pass the connection to the handler
-	handler := api.NewHandler(authenticator, storageProvider, conn)
+	handler := api.NewHandler(authenticator, storageProvider)
 
 	r := gin.Default()
 
@@ -100,3 +110,19 @@ func main() {
 	log.Printf("Server starting on %s", addr)
 	r.Run(addr)
 }
+
+// useSimplePostgresProtocol returns true when DATABASE_URL likely points at a
+// transaction pooler or when PGX_SIMPLE_PROTOCOL=1 forces it.
+func useSimplePostgresProtocol(dbURL string) bool {
+	if os.Getenv("PGX_SIMPLE_PROTOCOL") == "1" {
+		return true
+	}
+	if os.Getenv("PGX_SIMPLE_PROTOCOL") == "0" {
+		return false
+	}
+	u := strings.ToLower(dbURL)
+	return strings.Contains(u, "pooler.supabase.com") ||
+		strings.Contains(u, "pgbouncer=true") ||
+		strings.Contains(u, ":6543/")
+}
+

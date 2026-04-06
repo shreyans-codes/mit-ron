@@ -10,21 +10,22 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mitron/backend/internal/models"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type PostgresAuthenticator struct {
-	conn      *pgx.Conn
+	pool      *pgxpool.Pool
 	jwtSecret []byte
 }
 
-func NewPostgresAuthenticator(conn *pgx.Conn, jwtSecret string) (*PostgresAuthenticator, error) {
-	if conn == nil {
-		return nil, errors.New("database connection is nil")
+func NewPostgresAuthenticator(pool *pgxpool.Pool, jwtSecret string) (*PostgresAuthenticator, error) {
+	if pool == nil {
+		return nil, errors.New("database pool is nil")
 	}
 	return &PostgresAuthenticator{
-		conn:      conn,
+		pool:      pool,
 		jwtSecret: []byte(jwtSecret),
 	}, nil
 }
@@ -38,7 +39,7 @@ func (p *PostgresAuthenticator) Signup(username, email, password string) (*model
 	}
 
 	var userID string
-	err = p.conn.QueryRow(context.Background(),
+	err = p.pool.QueryRow(context.Background(),
 		"INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id",
 		username, email, string(hashedPassword)).Scan(&userID)
 
@@ -82,7 +83,7 @@ func (p *PostgresAuthenticator) Login(loginIdentifier, password string) (*models
 	var err error
 
 	// Try to find user by email first, then by username
-	err = p.conn.QueryRow(context.Background(),
+	err = p.pool.QueryRow(context.Background(),
 		"SELECT id, email, username, password_hash FROM users WHERE email = $1",
 		loginIdentifier).Scan(&userID, &email, &username, &hashedPassword)
 
@@ -90,7 +91,7 @@ func (p *PostgresAuthenticator) Login(loginIdentifier, password string) (*models
 		if errors.Is(err, pgx.ErrNoRows) {
 			log.Printf("User not found by email, trying username for %s", loginIdentifier)
 			// If not found by email, try by username
-			err = p.conn.QueryRow(context.Background(),
+			err = p.pool.QueryRow(context.Background(),
 				"SELECT id, email, username, password_hash FROM users WHERE username = $1",
 				loginIdentifier).Scan(&userID, &email, &username, &hashedPassword)
 			if err != nil {
@@ -178,7 +179,7 @@ func (p *PostgresAuthenticator) UpdateUser(token string, updateData map[string]i
 		}
 		// Check if username is already taken by another user
 		var count int
-		err := p.conn.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE username = $1 AND id <> $2", username, user.ID).Scan(&count)
+		err := p.pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM users WHERE username = $1 AND id <> $2", username, user.ID).Scan(&count)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check username availability: %v", err)
 		}
@@ -199,7 +200,7 @@ func (p *PostgresAuthenticator) UpdateUser(token string, updateData map[string]i
 	query := fmt.Sprintf("UPDATE public.users SET %s WHERE id = $%d RETURNING id", strings.Join(updateFields, ", "), i)
 
 	var updatedUserID string
-	err = p.conn.QueryRow(context.Background(), query, updateValues...).Scan(&updatedUserID)
+	err = p.pool.QueryRow(context.Background(), query, updateValues...).Scan(&updatedUserID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update user: %v", err)
 	}
@@ -239,39 +240,55 @@ func (p *PostgresAuthenticator) GetUserFromToken(tokenString string) (*models.Us
 }
 
 func (p *PostgresAuthenticator) getUserByID(userID string) (*models.User, error) {
+	log.Printf("Fetching user by ID: %s", userID)
 	var user models.User
 	query := `
 		SELECT id, email, username, display_name, avatar_url, bio, created_at 
 		FROM public.users 
 		WHERE id = $1
 	`
-	row := p.conn.QueryRow(context.Background(), query, userID)
+	timeout := 10 * time.Second // Set a reasonable timeout for database operations
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel() // Ensure the context is cancelled to release resources
+
+	row := p.pool.QueryRow(ctx, query, userID)
 	err := row.Scan(&user.ID, &user.Email, &user.Username, &user.DisplayName, &user.AvatarURL, &user.Bio, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			log.Printf("User with ID %s not found", userID)
 			return nil, errors.New("user not found")
 		}
+		log.Printf("Database error fetching user by ID %s: %v", userID, err)
 		return nil, fmt.Errorf("database error fetching user by ID: %v", err)
 	}
+	log.Printf("Successfully fetched user by ID: %s", userID)
 	return &user, nil
 }
 
 // GetUserByUsername retrieves user details by username.
 func (p *PostgresAuthenticator) GetUserByUsername(username string) (*models.User, error) {
+	log.Printf("Fetching user by username: %s", username)
 	query := `
-		SELECT id, username, email, display_name, avatar_url, bio, created_at
+		SELECT id, email, username, display_name, avatar_url, bio, created_at
 		FROM public.users
 		WHERE username = $1
 	`
-	row := p.conn.QueryRow(context.Background(), query, username)
+	timeout := 10 * time.Second // Set a reasonable timeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	row := p.pool.QueryRow(ctx, query, username)
 	var user models.User
 	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.AvatarURL, &user.Bio, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			log.Printf("User with username %s not found", username)
 			return nil, errors.New("user not found")
 		}
+		log.Printf("Database error fetching user by username %s: %v", username, err)
 		return nil, fmt.Errorf("database error fetching user by username: %v", err)
 	}
+	log.Printf("Successfully fetched user by username: %s", username)
 	return &user, nil
 }
 
@@ -281,8 +298,7 @@ func (p *PostgresAuthenticator) SearchUsers(query string) ([]models.Profile, err
 		return []models.Profile{}, nil
 	}
 
-	// Use ILIKE for case-insensitive search and consider FTS for performance if needed
-	// For now, using B-tree index on username and ILIKE for simplicity and cost-effectiveness
+	log.Printf("Searching users for query: %s", query)
 	searchQuery := "%" + strings.ToLower(query) + "%"
 	sql := `
 		SELECT id, username, display_name, avatar_url, bio
@@ -291,8 +307,13 @@ func (p *PostgresAuthenticator) SearchUsers(query string) ([]models.Profile, err
 		ORDER BY username ASC
 		LIMIT 10 
 	`
-	rows, err := p.conn.Query(context.Background(), sql, searchQuery)
+	timeout := 10 * time.Second // Set a reasonable timeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	rows, err := p.pool.Query(ctx, sql, searchQuery)
 	if err != nil {
+		log.Printf("Failed to search users: %v", err)
 		return nil, fmt.Errorf("failed to search users: %v", err)
 	}
 	defer rows.Close()
@@ -308,9 +329,10 @@ func (p *PostgresAuthenticator) SearchUsers(query string) ([]models.Profile, err
 	}
 
 	if err := rows.Err(); err != nil {
+		log.Printf("Error iterating user search results: %v", err)
 		return nil, fmt.Errorf("error iterating user search results: %v", err)
 	}
-
+	log.Printf("Found %d users for query: %s", len(profiles), query)
 	return profiles, nil
 }
 
@@ -321,7 +343,7 @@ func (p *PostgresAuthenticator) AddFriend(userID, friendID string) error {
 
 	// Check if friendship already exists
 	var exists bool
-	err := p.conn.QueryRow(context.Background(),
+	err := p.pool.QueryRow(context.Background(),
 		"SELECT EXISTS(SELECT 1 FROM public.friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))",
 		userID, friendID).Scan(&exists)
 	if err != nil {
@@ -334,7 +356,7 @@ func (p *PostgresAuthenticator) AddFriend(userID, friendID string) error {
 	// Add the friendship (bidirectional or one-way depending on desired logic)
 	// This example assumes a one-way add, but a real system might require confirmation.
 	// For simplicity, we'll insert both ways to make querying easier if needed.
-	_, err = p.conn.Exec(context.Background(),
+	_, err = p.pool.Exec(context.Background(),
 		"INSERT INTO public.friends (user_id, friend_id) VALUES ($1, $2), ($2, $1)",
 		userID, friendID)
 	if err != nil {
@@ -345,7 +367,7 @@ func (p *PostgresAuthenticator) AddFriend(userID, friendID string) error {
 
 func (p *PostgresAuthenticator) CreateGroup(name, description, creatorID string) (*models.Group, error) {
 	var groupID string
-	err := p.conn.QueryRow(context.Background(),
+	err := p.pool.QueryRow(context.Background(),
 		"INSERT INTO public.groups (name, description, creator_id) VALUES ($1, $2, $3) RETURNING id",
 		name, description, creatorID).Scan(&groupID)
 	if err != nil {
@@ -353,12 +375,12 @@ func (p *PostgresAuthenticator) CreateGroup(name, description, creatorID string)
 	}
 
 	// Add the creator as the first member of the group
-	_, err = p.conn.Exec(context.Background(),
+	_, err = p.pool.Exec(context.Background(),
 		"INSERT INTO public.group_members (group_id, user_id) VALUES ($1, $2)",
 		groupID, creatorID)
 	if err != nil {
 		// Attempt to clean up the created group if adding member fails
-		_, _ = p.conn.Exec(context.Background(), "DELETE FROM public.groups WHERE id = $1", groupID)
+		_, _ = p.pool.Exec(context.Background(), "DELETE FROM public.groups WHERE id = $1", groupID)
 		return nil, fmt.Errorf("failed to add creator to group: %v", err)
 	}
 
@@ -374,7 +396,7 @@ func (p *PostgresAuthenticator) CreateGroup(name, description, creatorID string)
 func (p *PostgresAuthenticator) JoinGroup(groupID, userID string) error {
 	// Check if group exists
 	var groupExists bool
-	err := p.conn.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM public.groups WHERE id = $1)", groupID).Scan(&groupExists)
+	err := p.pool.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM public.groups WHERE id = $1)", groupID).Scan(&groupExists)
 	if err != nil {
 		return fmt.Errorf("database error checking group existence: %v", err)
 	}
@@ -384,7 +406,7 @@ func (p *PostgresAuthenticator) JoinGroup(groupID, userID string) error {
 
 	// Check if user is already a member
 	var memberExists bool
-	err = p.conn.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM public.group_members WHERE group_id = $1 AND user_id = $2)", groupID, userID).Scan(&memberExists)
+	err = p.pool.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM public.group_members WHERE group_id = $1 AND user_id = $2)", groupID, userID).Scan(&memberExists)
 	if err != nil {
 		return fmt.Errorf("database error checking group membership: %v", err)
 	}
@@ -392,7 +414,7 @@ func (p *PostgresAuthenticator) JoinGroup(groupID, userID string) error {
 		return errors.New("user is already a member of this group")
 	}
 
-	_, err = p.conn.Exec(context.Background(),
+	_, err = p.pool.Exec(context.Background(),
 		"INSERT INTO public.group_members (group_id, user_id) VALUES ($1, $2)",
 		groupID, userID)
 	if err != nil {
@@ -410,7 +432,7 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 		GROUP BY g.id, g.name, g.description, g.creator_id, g.created_at
 		ORDER BY g.created_at DESC
 	`
-	rows, err := p.conn.Query(context.Background(), query, userID)
+	rows, err := p.pool.Query(context.Background(), query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user's groups: %v", err)
 	}
@@ -441,7 +463,7 @@ func (p *PostgresAuthenticator) getGroupByID(groupID string) (*models.Group, err
 		WHERE g.id = $1
 		GROUP BY g.id, g.name, g.description, g.creator_id, g.created_at
 	`
-	row := p.conn.QueryRow(context.Background(), query, groupID)
+	row := p.pool.QueryRow(context.Background(), query, groupID)
 	var group models.Group
 	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &group.MemberCount)
 	if err != nil {
@@ -459,7 +481,7 @@ func (p *PostgresAuthenticator) GetProfile(username string) (*models.Profile, er
 		FROM public.users
 		WHERE username = $1
 	`
-	row := p.conn.QueryRow(context.Background(), query, username)
+	row := p.pool.QueryRow(context.Background(), query, username)
 	var profile models.Profile
 	err := row.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio)
 	if err != nil {
@@ -510,8 +532,3 @@ func stringValue(s *string) string {
 	return *s
 }
 
-func (p *PostgresAuthenticator) Close() {
-	if p.conn != nil {
-		p.conn.Close(context.Background())
-	}
-}

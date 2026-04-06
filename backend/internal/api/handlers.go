@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5" // Import pgx
 	"github.com/mitron/backend/internal/auth"
 	"github.com/mitron/backend/internal/models"
 	"github.com/mitron/backend/internal/storage"
@@ -20,11 +19,10 @@ import (
 type Handler struct {
 	auth    auth.Authenticator
 	storage storage.StorageProvider
-	conn    *pgx.Conn // Added conn to Handler
 }
 
-func NewHandler(a auth.Authenticator, s storage.StorageProvider, conn *pgx.Conn) *Handler { // Added conn parameter
-	return &Handler{auth: a, storage: s, conn: conn}
+func NewHandler(a auth.Authenticator, s storage.StorageProvider) *Handler {
+	return &Handler{auth: a, storage: s}
 }
 
 type AuthRequest struct {

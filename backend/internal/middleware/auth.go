@@ -18,8 +18,8 @@ func AuthMiddleware(authenticator auth.Authenticator) gin.HandlerFunc {
 			return
 		}
 
-		if strings.HasPrefix(token, "Bearer ") {
-			token = strings.TrimPrefix(token, "Bearer ")
+		if after, ok := strings.CutPrefix(token, "Bearer "); ok {
+			token = after
 		}
 
 		user, err := authenticator.GetUserFromToken(token)
