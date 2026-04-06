@@ -435,5 +435,9 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_userKey);
+
+    // Clear cache entries as well
+    await CacheService.instance.deleteData(_cachedProfilesKey);
+    await CacheService.instance.deleteData(_cachedGroupsKey);
   }
 }

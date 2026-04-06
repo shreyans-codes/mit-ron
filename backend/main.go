@@ -38,7 +38,7 @@ func main() {
 	defer conn.Close(context.Background()) // Ensure connection is closed
 
 	// Initialize modular components
-	authenticator, err := auth.NewPostgresAuthenticator(dbURL, jwtSecret) // This should now use conn
+	authenticator, err := auth.NewPostgresAuthenticator(conn, jwtSecret) // Pass existing conn
 	if err != nil {
 		log.Fatalf("Failed to initialize authenticator: %v", err)
 	}

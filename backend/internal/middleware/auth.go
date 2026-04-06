@@ -24,7 +24,7 @@ func AuthMiddleware(authenticator auth.Authenticator) gin.HandlerFunc {
 
 		user, err := authenticator.GetUserFromToken(token)
 		if err != nil {
-			log.Printf("AuthMiddleware error: %v", err)
+			log.Printf("AuthMiddleware: Failed to get user from token. Error: %v", err) // More specific logging
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
 			return

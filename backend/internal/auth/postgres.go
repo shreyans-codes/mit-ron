@@ -19,12 +19,10 @@ type PostgresAuthenticator struct {
 	jwtSecret []byte
 }
 
-func NewPostgresAuthenticator(dbURL, jwtSecret string) (*PostgresAuthenticator, error) {
-	conn, err := pgx.Connect(context.Background(), dbURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %v", err)
+func NewPostgresAuthenticator(conn *pgx.Conn, jwtSecret string) (*PostgresAuthenticator, error) {
+	if conn == nil {
+		return nil, errors.New("database connection is nil")
 	}
-
 	return &PostgresAuthenticator{
 		conn:      conn,
 		jwtSecret: []byte(jwtSecret),
