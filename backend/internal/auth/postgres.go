@@ -15,6 +15,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var (
+	ErrAlreadyFriends        = errors.New("already friends")
+	ErrFriendRequestPending  = errors.New("friend request already pending")
+	ErrFriendRequestNotFound = errors.New("no pending friend request from this user")
+)
+
 type PostgresAuthenticator struct {
 	pool      *pgxpool.Pool
 	jwtSecret []byte
@@ -336,33 +342,163 @@ func (p *PostgresAuthenticator) SearchUsers(query string) ([]models.Profile, err
 	return profiles, nil
 }
 
-func (p *PostgresAuthenticator) AddFriend(userID, friendID string) error {
-	if userID == friendID {
+func (p *PostgresAuthenticator) AddFriend(initiatorID, recipientID string) error {
+	if initiatorID == recipientID {
 		return errors.New("cannot add yourself as a friend")
 	}
 
-	// Check if friendship already exists
-	var exists bool
-	err := p.pool.QueryRow(context.Background(),
-		"SELECT EXISTS(SELECT 1 FROM public.friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))",
-		userID, friendID).Scan(&exists)
-	if err != nil {
-		return fmt.Errorf("database error checking existing friendship: %v", err)
+	ctx := context.Background()
+	var status string
+	err := p.pool.QueryRow(ctx, `
+		SELECT status::text FROM public.friends
+		WHERE (initiator_id = $1 AND recipient_id = $2) OR (initiator_id = $2 AND recipient_id = $1)
+	`, initiatorID, recipientID).Scan(&status)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		_, insErr := p.pool.Exec(ctx,
+			`INSERT INTO public.friends (initiator_id, recipient_id, status) VALUES ($1, $2, 'pending')`,
+			initiatorID, recipientID)
+		if insErr != nil {
+			return fmt.Errorf("database error adding friend: %v", insErr)
+		}
+		return nil
 	}
-	if exists {
-		return errors.New("friendship already exists")
+	if err != nil {
+		return fmt.Errorf("database error checking friendship: %v", err)
 	}
 
-	// Add the friendship (bidirectional or one-way depending on desired logic)
-	// This example assumes a one-way add, but a real system might require confirmation.
-	// For simplicity, we'll insert both ways to make querying easier if needed.
-	_, err = p.pool.Exec(context.Background(),
-		"INSERT INTO public.friends (user_id, friend_id) VALUES ($1, $2), ($2, $1)",
-		userID, friendID)
+	switch status {
+	case "accepted":
+		return ErrAlreadyFriends
+	case "pending":
+		return ErrFriendRequestPending
+	case "rejected":
+		_, updErr := p.pool.Exec(ctx, `
+			UPDATE public.friends
+			SET initiator_id = $1, recipient_id = $2, status = 'pending', created_at = now()
+			WHERE (initiator_id = $1 AND recipient_id = $2) OR (initiator_id = $2 AND recipient_id = $1)
+		`, initiatorID, recipientID)
+		if updErr != nil {
+			return fmt.Errorf("database error re-opening friend request: %v", updErr)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown friendship status: %s", status)
+	}
+}
+
+func (p *PostgresAuthenticator) RespondToFriendRequest(recipientID, initiatorID string, accept bool) error {
+	if recipientID == initiatorID {
+		return errors.New("invalid friend request response")
+	}
+	ctx := context.Background()
+	newStatus := "rejected"
+	if accept {
+		newStatus = "accepted"
+	}
+	tag, err := p.pool.Exec(ctx, `
+		UPDATE public.friends
+		SET status = $1::friendship_status
+		WHERE initiator_id = $2 AND recipient_id = $3 AND status = 'pending'
+	`, newStatus, initiatorID, recipientID)
 	if err != nil {
-		return fmt.Errorf("database error adding friend: %v", err)
+		return fmt.Errorf("database error responding to friend request: %v", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrFriendRequestNotFound
 	}
 	return nil
+}
+
+func (p *PostgresAuthenticator) GetFriendLists(userID string) (*models.FriendLists, error) {
+	ctx := context.Background()
+	out := &models.FriendLists{
+		Friends:         []models.Profile{},
+		PendingIncoming: []models.PendingFriendProfile{},
+		PendingOutgoing: []models.PendingFriendProfile{},
+	}
+
+	friendsSQL := `
+		SELECT u.id, u.username, u.display_name, u.avatar_url, u.bio
+		FROM public.friends f
+		JOIN public.users u ON u.id = CASE
+			WHEN f.initiator_id = $1 THEN f.recipient_id
+			ELSE f.initiator_id
+		END
+		WHERE (f.initiator_id = $1 OR f.recipient_id = $1) AND f.status = 'accepted'
+		ORDER BY u.username ASC
+	`
+	rows, err := p.pool.Query(ctx, friendsSQL, userID)
+	if err != nil {
+		return nil, fmt.Errorf("database error listing friends: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var profile models.Profile
+		if err := rows.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio); err != nil {
+			return nil, fmt.Errorf("scan friend profile: %v", err)
+		}
+		out.Friends = append(out.Friends, profile)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	incomingSQL := `
+		SELECT u.id, u.username, u.display_name, u.avatar_url, u.bio, f.initiator_id::text
+		FROM public.friends f
+		JOIN public.users u ON u.id = f.initiator_id
+		WHERE f.recipient_id = $1 AND f.status = 'pending'
+		ORDER BY f.created_at DESC
+	`
+	rowsIn, err := p.pool.Query(ctx, incomingSQL, userID)
+	if err != nil {
+		return nil, fmt.Errorf("database error listing incoming requests: %v", err)
+	}
+	defer rowsIn.Close()
+	for rowsIn.Next() {
+		var profile models.Profile
+		var initID string
+		if err := rowsIn.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio, &initID); err != nil {
+			return nil, fmt.Errorf("scan incoming request: %v", err)
+		}
+		out.PendingIncoming = append(out.PendingIncoming, models.PendingFriendProfile{
+			Profile:     profile,
+			InitiatorID: initID,
+		})
+	}
+	if err := rowsIn.Err(); err != nil {
+		return nil, err
+	}
+
+	outgoingSQL := `
+		SELECT u.id, u.username, u.display_name, u.avatar_url, u.bio, f.initiator_id::text
+		FROM public.friends f
+		JOIN public.users u ON u.id = f.recipient_id
+		WHERE f.initiator_id = $1 AND f.status = 'pending'
+		ORDER BY f.created_at DESC
+	`
+	rowsOut, err := p.pool.Query(ctx, outgoingSQL, userID)
+	if err != nil {
+		return nil, fmt.Errorf("database error listing outgoing requests: %v", err)
+	}
+	defer rowsOut.Close()
+	for rowsOut.Next() {
+		var profile models.Profile
+		var initID string
+		if err := rowsOut.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio, &initID); err != nil {
+			return nil, fmt.Errorf("scan outgoing request: %v", err)
+		}
+		out.PendingOutgoing = append(out.PendingOutgoing, models.PendingFriendProfile{
+			Profile:     profile,
+			InitiatorID: initID,
+		})
+	}
+	if err := rowsOut.Err(); err != nil {
+		return nil, err
+	}
+
+	return out, nil
 }
 
 func (p *PostgresAuthenticator) CreateGroup(name, description, creatorID string) (*models.Group, error) {

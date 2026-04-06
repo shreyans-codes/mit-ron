@@ -12,7 +12,9 @@ class ApiConstants {
   static const String profile = '/profile'; // Will be used as /profile/:username
 
   // Friends Endpoints
+  static const String friendsList = '/friends';
   static const String addFriend = '/friends/add';
+  static const String respondFriend = '/friends/respond';
 
   // Groups Endpoints
   static const String createGroup = '/groups/create';

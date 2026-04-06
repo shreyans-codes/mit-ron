@@ -1,5 +1,4 @@
 // frontend/lib/services/cache_service.dart
-import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as developer; // Import dart:developer for log
 

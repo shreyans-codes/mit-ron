@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
-import 'package:mitron/services/cache_service.dart'; // Assuming CacheService is used here
 import '../profile/user_profile_page.dart';
 
 class UserSearchPage extends StatefulWidget {
@@ -42,12 +41,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     });
 
     try {
-      // Check cache first
-      final cachedProfiles = await AuthService.instance.getCachedProfiles();
-      // This is a basic cache check. A real implementation would match the query.
-      // For now, if cache exists and is valid, we might use it, but direct API call is safer for fresh results.
-      // We will fetch fresh results and update cache if successful.
-
       final profiles = await AuthService.instance.searchUsers(query);
       setState(() {
         _searchResults = profiles;

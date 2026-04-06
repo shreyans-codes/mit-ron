@@ -96,17 +96,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
                               onPressed: () async {
                                 try {
                                   await AuthService.instance.addFriend(_profile!.username);
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Friend request sent to ${_profile!.username}')),
-                                    );
-                                  }
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Friend request sent to ${_profile!.username}')),
+                                  );
                                 } catch (e) {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Error sending friend request: ${e.toString()}')),
-                                    );
-                                  }
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Error sending friend request: ${e.toString()}')),
+                                  );
                                 }
                               },
                               child: const Text('Add Friend'),

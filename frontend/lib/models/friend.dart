@@ -1,27 +1,31 @@
 // frontend/lib/models/friend.dart
 class Friend {
-  final String userId;
-  final String friendId;
+  final String initiatorId;
+  final String recipientId;
+  final String status;
   final DateTime createdAt;
 
   Friend({
-    required this.userId,
-    required this.friendId,
+    required this.initiatorId,
+    required this.recipientId,
+    required this.status,
     required this.createdAt,
   });
 
   factory Friend.fromJson(Map<String, dynamic> json) {
     return Friend(
-      userId: json['user_id'],
-      friendId: json['friend_id'],
-      createdAt: DateTime.parse(json['created_at']),
+      initiatorId: json['initiator_id'] as String,
+      recipientId: json['recipient_id'] as String,
+      status: json['status'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'user_id': userId,
-      'friend_id': friendId,
+      'initiator_id': initiatorId,
+      'recipient_id': recipientId,
+      'status': status,
       'created_at': createdAt.toIso8601String(),
     };
   }

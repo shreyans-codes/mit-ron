@@ -90,7 +90,7 @@ class _SettingsPageState extends State<SettingsPage> {
             },
             leading: const Icon(Icons.person_outline_rounded),
             title: const Text('Update Profile'),
-            subtitle: const Text('Change name and profile picture'),
+            subtitle: Text('@${_user.username} · Change name and profile picture'),
             trailing: const Icon(Icons.chevron_right_rounded),
           ),
           const Divider(height: 32),

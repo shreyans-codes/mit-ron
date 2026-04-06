@@ -3,14 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:collection/collection.dart'; // For ListEquality
 import 'dart:developer' as developer; // Import dart:developer for log
 import '../core/constants/api_constants.dart';
 import '../models/auth_session.dart';
 import '../models/auth_user.dart';
-import '../models/profile.dart'; // Assuming Profile model exists
-import '../models/friend.dart';   // Assuming Friend model exists
-import '../models/group.dart';   // Assuming Group model exists
+import '../models/profile.dart';
+import '../models/friend_lists.dart';
+import '../models/group.dart';
 import 'auth_exception.dart';
 import 'cache_service.dart'; // Import the new cache service
 
@@ -256,24 +255,37 @@ class AuthService {
     }
   }
 
-  Future<List<Profile>> getFriends() async {
+  Future<FriendLists> getFriendLists() async {
     if (_token == null) throw AuthException('Not authenticated');
 
-    // Placeholder for fetching friends
-    // TODO: Implement backend endpoint and logic for fetching friends
-    // final response = await http.get(
-    //   Uri.parse('${ApiConstants.baseUrl}${ApiConstants.friendsList}'), // Assuming this endpoint exists
-    //   headers: {'Authorization': 'Bearer ${_token!.trim()}'},
-    // );
-    // if (response.statusCode == 200) {
-    //   final List<dynamic> data = jsonDecode(response.body);
-    //   return data.map((item) => _profileFromJson(item)).toList();
-    // } else {
-    //   final error = jsonDecode(response.body)['error'] ?? 'Failed to fetch friends';
-    //   throw AuthException(error);
-    // }
-    
-    return []; // Return empty list as placeholder
+    final response = await http.get(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.friendsList}'),
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
+    );
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = jsonDecode(response.body) as Map<String, dynamic>;
+      return FriendLists.fromJson(data);
+    }
+    final error = jsonDecode(response.body)['error'] ?? 'Failed to fetch friends';
+    throw AuthException(error is String ? error : error.toString());
+  }
+
+  Future<void> respondToFriendRequest({required String initiatorId, required bool accept}) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.respondFriend}'),
+      headers: {
+        'Authorization': 'Bearer ${_token!.trim()}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'initiator_id': initiatorId, 'accept': accept}),
+    );
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      final error = body is Map<String, dynamic> ? body['error'] : null;
+      throw AuthException(error?.toString() ?? 'Failed to respond to friend request');
+    }
   }
 
   // --- Caching Logic ---

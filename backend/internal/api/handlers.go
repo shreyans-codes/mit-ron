@@ -209,11 +209,65 @@ func (h *Handler) HandleAddFriend(c *gin.Context) {
 
 	err = h.auth.AddFriend(currentUserID, friendUser.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, auth.ErrAlreadyFriends), errors.Is(err, auth.ErrFriendRequestPending):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Friend request sent successfully"})
+}
+
+func (h *Handler) HandleGetFriends(c *gin.Context) {
+	token := c.GetString("token")
+	currentUserID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	lists, err := h.auth.GetFriendLists(currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load friends: %v", err)})
+		return
+	}
+	c.JSON(http.StatusOK, lists)
+}
+
+func (h *Handler) HandleRespondFriendRequest(c *gin.Context) {
+	token := c.GetString("token")
+	currentUserID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		InitiatorID string `json:"initiator_id" binding:"required"`
+		Accept      bool   `json:"accept"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = h.auth.RespondToFriendRequest(currentUserID, req.InitiatorID, req.Accept)
+	if err != nil {
+		if errors.Is(err, auth.ErrFriendRequestNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Accept {
+		c.JSON(http.StatusOK, gin.H{"message": "Friend request accepted"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Friend request declined"})
 }
 
 func (h *Handler) HandleCreateGroup(c *gin.Context) {

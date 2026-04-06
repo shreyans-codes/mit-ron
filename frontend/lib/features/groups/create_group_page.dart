@@ -1,7 +1,6 @@
 // frontend/lib/features/groups/create_group_page.dart
 import 'package:flutter/material.dart';
 import 'package:mitron/services/auth_service.dart';
-import 'package:mitron/models/group.dart'; // Import Group model
 
 class CreateGroupPage extends StatefulWidget {
   const CreateGroupPage({super.key});

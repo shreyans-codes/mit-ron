@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:mitron/models/group.dart';
 import 'package:mitron/services/auth_service.dart';
-import 'package:mitron/services/cache_service.dart'; // Import CacheService
 import 'create_group_page.dart'; // Import CreateGroupPage
 import 'join_group_page.dart';   // Import JoinGroupPage
 
@@ -76,8 +75,8 @@ class _GroupListPageState extends State<GroupListPage> {
             icon: const Icon(Icons.add),
             onPressed: () async {
               final createdGroup = await Navigator.of(context).pushNamed(CreateGroupPage.routeName);
-              if (createdGroup != null && createdGroup is Group && mounted) {
-                // Refresh the list if a group was created
+              if (!context.mounted) return;
+              if (createdGroup != null && createdGroup is Group) {
                 _fetchGroups();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Group "${createdGroup.name}" created!')),
@@ -90,8 +89,8 @@ class _GroupListPageState extends State<GroupListPage> {
             icon: const Icon(Icons.group_add), // Changed to a valid icon
             onPressed: () async {
               final joined = await Navigator.of(context).pushNamed(JoinGroupPage.routeName);
-              if (joined != null && joined is bool && joined && mounted) {
-                // Refresh the list if joining was successful (assuming join returns bool true)
+              if (!context.mounted) return;
+              if (joined != null && joined is bool && joined) {
                 _fetchGroups();
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Successfully joined group!')),

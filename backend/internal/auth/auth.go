@@ -12,7 +12,9 @@ type Authenticator interface {
 	GetUserFromToken(token string) (*models.User, error)
 	GetUserByUsername(username string) (*models.User, error)
 	SearchUsers(query string) ([]models.Profile, error)
-	AddFriend(userID, friendID string) error
+	AddFriend(initiatorID, recipientID string) error
+	RespondToFriendRequest(recipientID, initiatorID string, accept bool) error
+	GetFriendLists(userID string) (*models.FriendLists, error)
 	CreateGroup(name, description, creatorID string) (*models.Group, error)
 	JoinGroup(groupID, userID string) error
 	GetMyGroups(userID string) ([]models.Group, error)

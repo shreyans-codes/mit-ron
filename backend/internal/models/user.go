@@ -25,10 +25,34 @@ type AuthResponse struct {
 	User        User   `json:"user"`
 }
 
+// FriendshipStatus matches Postgres enum public.friendship_status.
+type FriendshipStatus string
+
+const (
+	FriendshipPending  FriendshipStatus = "pending"
+	FriendshipAccepted FriendshipStatus = "accepted"
+	FriendshipRejected FriendshipStatus = "rejected"
+)
+
+// Friend is one row in public.friends (directional request / relationship).
 type Friend struct {
-	UserID    string    `json:"user_id"`
-	FriendID  string    `json:"friend_id"`
-	CreatedAt time.Time `json:"created_at"`
+	InitiatorID string           `json:"initiator_id"`
+	RecipientID string           `json:"recipient_id"`
+	Status      FriendshipStatus `json:"status"`
+	CreatedAt   time.Time        `json:"created_at"`
+}
+
+// PendingFriendProfile is a pending request with the other user's profile and initiator id (for accept/reject).
+type PendingFriendProfile struct {
+	Profile     Profile `json:"profile"`
+	InitiatorID string  `json:"initiator_id"`
+}
+
+// FriendLists is returned by GET /friends.
+type FriendLists struct {
+	Friends         []Profile              `json:"friends"`
+	PendingIncoming []PendingFriendProfile `json:"pending_incoming"`
+	PendingOutgoing []PendingFriendProfile `json:"pending_outgoing"`
 }
 
 type Group struct {

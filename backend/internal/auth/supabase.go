@@ -91,8 +91,16 @@ func (s *SupabaseAuthenticator) SearchUsers(query string) ([]models.Profile, err
 	return nil, errors.New("method not implemented for supabase")
 }
 
-func (s *SupabaseAuthenticator) AddFriend(userID, friendID string) error {
+func (s *SupabaseAuthenticator) AddFriend(initiatorID, recipientID string) error {
 	return errors.New("method not implemented for supabase")
+}
+
+func (s *SupabaseAuthenticator) RespondToFriendRequest(recipientID, initiatorID string, accept bool) error {
+	return errors.New("method not implemented for supabase")
+}
+
+func (s *SupabaseAuthenticator) GetFriendLists(userID string) (*models.FriendLists, error) {
+	return nil, errors.New("method not implemented for supabase")
 }
 
 func (s *SupabaseAuthenticator) CreateGroup(name, description, creatorID string) (*models.Group, error) {
