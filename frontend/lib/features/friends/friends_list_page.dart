@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:mitron/models/friend.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
+import '../users/search/user_search_page.dart';
+import '../users/profile/user_profile_page.dart';
 
 class FriendsListPage extends StatefulWidget {
   const FriendsListPage({super.key});

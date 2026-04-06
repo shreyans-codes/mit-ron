@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
 import 'package:mitron/services/cache_service.dart'; // Assuming CacheService is used here
+import '../profile/user_profile_page.dart';
 
 class UserSearchPage extends StatefulWidget {
   const UserSearchPage({super.key});
@@ -71,12 +72,12 @@ class _UserSearchPageState extends State<UserSearchPage> {
           child: profile.avatarUrl == null ? const Icon(Icons.person) : null,
         ),
         title: Text(profile.displayName.isEmpty ? profile.username : profile.displayName),
-        subtitle: Text('@${profile.username}
-${profile.bio}'), // Display username and bio
+        subtitle: Text('@${profile.username}\n${profile.bio}'), // Display username and bio
         onTap: () {
-          // TODO: Navigate to user profile page
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Tapped on ${profile.username}')),
+          // Navigate to user profile page
+          Navigator.of(context).pushNamed(
+            UserProfilePage.routeName,
+            arguments: profile.username, // Pass username to profile page
           );
         },
       ),

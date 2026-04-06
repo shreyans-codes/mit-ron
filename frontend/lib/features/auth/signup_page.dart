@@ -18,6 +18,7 @@ class SignUpPage extends StatefulWidget {
 
 class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
+  final _username = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
@@ -30,6 +31,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
   @override
   void dispose() {
+    _username.dispose();
     _email.dispose();
     _password.dispose();
     _confirm.dispose();
@@ -49,7 +51,8 @@ class _SignUpPageState extends State<SignUpPage> {
     setState(() => _loading = true);
     try {
       final session = await _auth.signUp(
-        _email.text,
+        _username.text.trim(),
+        _email.text.trim(),
         _password.text,
       );
       if (!mounted) return;
@@ -135,6 +138,25 @@ class _SignUpPageState extends State<SignUpPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 22),
+                                TextFormField(
+                                  controller: _username,
+                                  textInputAction: TextInputAction.next,
+                                  style: TextStyle(color: scheme.onSurface),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Username',
+                                    hintText: 'cool_user123',
+                                    prefixIcon: Icon(Icons.person_outline_rounded),
+                                  ),
+                                  validator: (v) {
+                                    final s = v?.trim() ?? '';
+                                    if (s.isEmpty) return 'Enter a username';
+                                    if (s.length < 3) {
+                                      return 'Username must be at least 3 characters';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 16),
                                 TextFormField(
                                   controller: _email,
                                   keyboardType: TextInputType.emailAddress,

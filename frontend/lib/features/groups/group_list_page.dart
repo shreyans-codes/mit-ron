@@ -87,7 +87,7 @@ class _GroupListPageState extends State<GroupListPage> {
             tooltip: 'Create Group',
           ),
           IconButton(
-            icon: const Icon(Icons.join_ளுக்கான), // Icon for joining a group
+            icon: const Icon(Icons.group_add), // Changed to a valid icon
             onPressed: () async {
               final joined = await Navigator.of(context).pushNamed(JoinGroupPage.routeName);
               if (joined != null && joined is bool && joined && mounted) {

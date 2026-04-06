@@ -1,31 +1,46 @@
+// frontend/lib/services/cache_service.dart
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:developer';
+import 'dart:developer' as developer; // Import dart:developer for log
 
 class CacheService {
   CacheService._();
   static final CacheService instance = CacheService._();
 
+  // Initialize SharedPreferences
+  static SharedPreferences? _prefs;
+
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+    developer.log('CacheService initialized.');
+  }
+
   Future<void> saveData(String key, String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, value);
-    log.fine('Data saved to cache for key: $key');
+    if (_prefs == null) {
+      throw Exception('CacheService not initialized. Call init() first.');
+    }
+    await _prefs!.setString(key, value);
+    developer.log('Data saved to cache for key: $key');
   }
 
   Future<String?> getData(String key) async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString(key);
+    if (_prefs == null) {
+      throw Exception('CacheService not initialized. Call init() first.');
+    }
+    final data = _prefs!.getString(key);
     if (data != null) {
-      log.fine('Data retrieved from cache for key: $key');
+      developer.log('Data retrieved from cache for key: $key');
     } else {
-      log.fine('No data found in cache for key: $key');
+      developer.log('No data found in cache for key: $key');
     }
     return data;
   }
 
   Future<void> deleteData(String key) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(key);
-    log.fine('Data deleted from cache for key: $key');
+    if (_prefs == null) {
+      throw Exception('CacheService not initialized. Call init() first.');
+    }
+    await _prefs!.remove(key);
+    developer.log('Data deleted from cache for key: $key');
   }
 }

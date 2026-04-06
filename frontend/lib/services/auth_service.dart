@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:collection/collection.dart'; // For ListEquality
-import 'dart:developer'; // For log.warning
+import 'dart:developer' as developer; // Import dart:developer for log
 import '../core/constants/api_constants.dart';
 import '../models/auth_session.dart';
 import '../models/auth_user.dart';
@@ -41,7 +41,7 @@ class AuthService {
     final response = await http.post(
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.login}'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'login_identifier': loginIdentifier, 'password': password}), // Changed key to login_identifier
+      body: jsonEncode({'login_identifier': loginIdentifier, 'password': password}),
     );
 
     if (response.statusCode == 200) {
@@ -81,59 +81,36 @@ class AuthService {
           headers: {'Authorization': 'Bearer $_token'},
         );
       } catch (e) {
-        log.warning('Logout API call failed: $e');
-        // Continue clearing local session even if API call fails
+        developer.log('Logout API call failed: $e');
       }
     }
     await _clearSession();
   }
 
-  Future<AuthUser> updateProfile({String? displayName, String? avatarUrl, String? bio, String? username}) async {
-    if (_token == null) throw AuthException('Not authenticated');
-
-    Map<String, dynamic> updateData = {};
-    if (displayName != null) {
-      updateData['display_name'] = displayName;
-    }
-    if (bio != null) {
-      updateData['bio'] = bio;
-    }
-    if (username != null) {
-      updateData['username'] = username; // Ensure backend validates username format and uniqueness
-    }
-
-    // If only non-file fields are updated
-    if (updateData.isNotEmpty) {
-      final response, err := http.post(
-        Uri.parse('${ApiConstants.baseUrl}${ApiConstants.profileUpdate}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode(updateData),
-      );
-
-      if (response.statusCode == 200) {
-        final updatedUser = _userFromJson(jsonDecode(response.body));
-        await _saveCurrentUser(updatedUser);
-        return updatedUser;
-      } else {
-        final error = jsonDecode(response.body)['error'] ?? 'Profile update failed';
-        throw AuthException(error);
-      }
-    }
-
-    // Avatar upload is handled separately or requires multipart request implementation.
-    throw AuthException("No updates provided or avatar upload not fully implemented in this example.");
-  }
-
-  // Method for avatar upload via multipart request (example structure)
-  Future<AuthUser> uploadAvatar({required File avatar}) async {
+  // Handles profile updates, including text fields and optional avatar file
+  Future<AuthUser> updateProfile({String? displayName, String? bio, String? username, File? avatar}) async {
     if (_token == null) throw AuthException('Not authenticated');
 
     var request = http.MultipartRequest('POST', Uri.parse('${ApiConstants.baseUrl}${ApiConstants.profileUpdate}'));
     request.headers['Authorization'] = 'Bearer $_token';
-    request.files.add(await http.MultipartFile.fromPath('avatar', avatar.path));
+
+    if (displayName != null) {
+      request.fields['display_name'] = displayName;
+    }
+    if (bio != null) {
+      request.fields['bio'] = bio;
+    }
+    if (username != null) {
+      request.fields['username'] = username;
+    }
+
+    if (avatar != null) {
+      request.files.add(await http.MultipartFile.fromPath('avatar', avatar.path));
+    }
+
+    if (request.fields.isEmpty && request.files.isEmpty) {
+      throw AuthException("No updates provided.");
+    }
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
@@ -143,20 +120,21 @@ class AuthService {
       await _saveCurrentUser(updatedUser);
       return updatedUser;
     } else {
-      final error = jsonDecode(response.body)['error'] ?? 'Avatar upload failed';
+      final error = jsonDecode(response.body)['error'] ?? 'Profile update failed';
       throw AuthException(error);
     }
+  }
+
+  // DEPRECATED: use updateProfile instead
+  Future<AuthUser> uploadAvatar({required File avatar}) async {
+    return updateProfile(avatar: avatar);
   }
 
 
   Future<List<Profile>> searchUsers(String query) async {
     if (_token == null) throw AuthException('Not authenticated');
     
-    // Check cache first
     final cachedProfiles = await getCachedProfiles();
-    // Basic cache check: If cache exists and is valid, return it.
-    // A more sophisticated cache would match the query or invalidate intelligently.
-    // For now, we assume if cache is valid, it's good enough.
     if (cachedProfiles.isNotEmpty) {
       return cachedProfiles;
     }
@@ -169,7 +147,7 @@ class AuthService {
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       final profiles = data.map((item) => _profileFromJson(item)).toList();
-      await cacheProfiles(profiles); // Cache the new results
+      await cacheProfiles(profiles);
       return profiles;
     } else {
       final error = jsonDecode(response.body)['error'] ?? 'User search failed';
@@ -252,11 +230,8 @@ class AuthService {
   Future<List<Group>> getMyGroups() async {
     if (_token == null) throw AuthException('Not authenticated');
     
-    // Check cache first
     final cachedGroups = await getCachedGroups();
     if (cachedGroups.isNotEmpty) {
-      // Simple cache check; ideally, cache invalidation or smarter checks are needed.
-      // For now, return if cache exists and is recent enough.
       return cachedGroups;
     }
 
@@ -268,7 +243,7 @@ class AuthService {
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       final groups = data.map((item) => _groupFromJson(item)).toList();
-      await cacheGroups(groups); // Cache the new results
+      await cacheGroups(groups);
       return groups;
     } else {
       final error = jsonDecode(response.body)['error'] ?? 'Failed to fetch groups';
@@ -276,13 +251,11 @@ class AuthService {
     }
   }
 
-  // Placeholder method for fetching friends
-  // This will require a new backend endpoint (e.g., /friends/list)
   Future<List<Profile>> getFriends() async {
     if (_token == null) throw AuthException('Not authenticated');
 
-    // TODO: Implement backend endpoint for fetching friends
-    // Example call:
+    // Placeholder for fetching friends
+    // TODO: Implement backend endpoint and logic for fetching friends
     // final response = await http.get(
     //   Uri.parse('${ApiConstants.baseUrl}${ApiConstants.friendsList}'), // Assuming this endpoint exists
     //   headers: {'Authorization': 'Bearer $_token'},
@@ -295,8 +268,7 @@ class AuthService {
     //   throw AuthException(error);
     // }
     
-    // Returning empty list as placeholder
-    return [];
+    return []; // Return empty list as placeholder
   }
 
   // --- Caching Logic ---
@@ -323,13 +295,12 @@ class AuthService {
         final List<dynamic> profilesData = cacheEntry['profiles'];
         return profilesData.map((item) => _profileFromJson(item)).toList();
       } else {
-        // Cache expired
         await CacheService.instance.deleteData(_cachedProfilesKey);
         return [];
       }
     } catch (e) {
-      log.warning('Failed to decode or parse cached profiles: $e');
-      await CacheService.instance.deleteData(_cachedProfilesKey); // Clean up corrupted cache
+      developer.log('Failed to decode or parse cached profiles: $e');
+      await CacheService.instance.deleteData(_cachedProfilesKey);
       return [];
     }
   }
@@ -353,13 +324,12 @@ class AuthService {
         final List<dynamic> groupsData = cacheEntry['groups'];
         return groupsData.map((item) => _groupFromJson(item)).toList();
       } else {
-        // Cache expired
         await CacheService.instance.deleteData(_cachedGroupsKey);
         return [];
       }
     } catch (e) {
-      log.warning('Failed to decode or parse cached groups: $e');
-      await CacheService.instance.deleteData(_cachedGroupsKey); // Clean up corrupted cache
+      developer.log('Failed to decode or parse cached groups: $e');
+      await CacheService.instance.deleteData(_cachedGroupsKey);
       return [];
     }
   }
@@ -374,17 +344,14 @@ class AuthService {
   }
 
   AuthUser _userFromJson(Map<String, dynamic> json) {
-    // Handle potential differences in backend User model and frontend AuthUser model structure
-    // Backend might return 'username', 'display_name', 'avatar_url', 'bio' directly or under 'user_metadata'
-    final metadata = json['user_metadata'] ?? {}; // For potential Supabase compatibility
     return AuthUser(
       id: json['id'] as String,
       email: json['email'] as String,
-      username: json['username'] as String? ?? '', // From DB directly
-      displayName: metadata['display_name'] ?? json['display_name'] ?? '', // Fallback for display name
-      profilePictureUrl: metadata['avatar_url'] ?? json['avatar_url'], // Fallback for avatar URL
-      bio: json['bio'] as String? ?? '', // From DB directly
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
+      username: json['username'] as String? ?? '',
+      displayName: json['display_name'] as String? ?? '',
+      profilePictureUrl: json['avatar_url'] as String?,
+      bio: json['bio'] as String? ?? '',
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(), // Fixed: createdAt handled
     );
   }
 

@@ -2,32 +2,36 @@ class AuthUser {
   const AuthUser({
     required this.id,
     required this.email,
+    required this.username,
     required this.displayName,
-    this.username,
+    required this.createdAt,
     this.profilePictureUrl,
     this.bio,
   });
 
   final String id;
   final String email;
+  final String username;
   final String displayName;
-  final String? username;
+  final DateTime createdAt;
   final String? profilePictureUrl;
   final String? bio;
 
   AuthUser copyWith({
     String? id,
     String? email,
-    String? displayName,
     String? username,
+    String? displayName,
+    DateTime? createdAt,
     String? profilePictureUrl,
     String? bio,
   }) {
     return AuthUser(
       id: id ?? this.id,
       email: email ?? this.email,
-      displayName: displayName ?? this.displayName,
       username: username ?? this.username,
+      displayName: displayName ?? this.displayName,
+      createdAt: createdAt ?? this.createdAt,
       profilePictureUrl: profilePictureUrl ?? this.profilePictureUrl,
       bio: bio ?? this.bio,
     );

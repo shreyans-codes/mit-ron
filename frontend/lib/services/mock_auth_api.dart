@@ -15,12 +15,13 @@ class MockAuthApi {
   };
   
   final Map<String, AuthUser> _usersByEmail = {
-    'demo@mitron.app': const AuthUser(
+    'demo@mitron.app': AuthUser(
       id: 'usr_demo',
       email: 'demo@mitron.app',
       displayName: 'Demo User',
       username: 'demouser',
       bio: 'Just testing things out!',
+      createdAt: DateTime.now(),
     ),
   };
 
@@ -67,9 +68,10 @@ class MockAuthApi {
       id: 'usr_${email.hashCode.abs()}',
       email: normalized,
       displayName: displayName.trim(),
-      username: username?.trim(),
+      username: username?.trim() ?? '',
       profilePictureUrl: profilePictureUrl?.trim(),
       bio: bio?.trim(),
+      createdAt: DateTime.now(),
     );
     
     return _createSession(normalized);
