@@ -1,6 +1,5 @@
 // frontend/lib/features/friends/friends_list_page.dart
 import 'package:flutter/material.dart';
-import 'package:mitron/models/friend.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
 import '../users/search/user_search_page.dart';
