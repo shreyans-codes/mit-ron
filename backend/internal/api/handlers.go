@@ -1,24 +1,31 @@
 package api
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mitron/backend/internal/auth"
+	"github.com/mitron/backend/internal/models"
 	"github.com/mitron/backend/internal/storage"
 )
 
 type Handler struct {
 	auth    auth.Authenticator
 	storage storage.StorageProvider
+	conn    *pgx.Conn // Assuming conn is passed or accessible for handlers if needed directly
 }
 
-func NewHandler(a auth.Authenticator, s storage.StorageProvider) *Handler {
-	return &Handler{auth: a, storage: s}
+func NewHandler(a auth.Authenticator, s storage.StorageProvider, conn *pgx.Conn) *Handler { // Added conn parameter
+	return &Handler{auth: a, storage: s, conn: conn}
 }
 
 type AuthRequest struct {
@@ -26,14 +33,20 @@ type AuthRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type SignupRequest struct {
+	Username string `json:"username" binding:"required"`
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
 func (h *Handler) HandleSignup(c *gin.Context) {
-	var req AuthRequest
+	var req SignupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp, err := h.auth.Signup(req.Email, req.Password)
+	resp, err := h.auth.Signup(req.Username, req.Email, req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -49,8 +62,9 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.auth.Login(req.Email, req.Password)
+	resp, err := h.auth.Login(req.Email, req.Password) // This should now accept loginIdentifier (email or username)
 	if err != nil {
+		// Use a generic message for security, avoid revealing if it's email or password
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid login credentials"})
 		return
 	}
@@ -72,10 +86,10 @@ func (h *Handler) HandleSignout(c *gin.Context) {
 func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 	token := c.GetString("token")
 
-	// Handle file upload
+	// Handle file upload for avatar
 	file, err := c.FormFile("avatar")
 	var avatarURL string
-	if err == nil {
+	if err == nil { // Proceed only if file is present and no error during FormFile retrieval
 		openedFile, err := file.Open()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
@@ -90,14 +104,25 @@ func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 		}
 
 		fileName := fmt.Sprintf("%d_%s", SystemTimeNow(), filepath.Base(file.Filename))
+		// Ensure storage provider is initialized and available
+		if h.storage == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Storage provider not initialized"})
+			return
+		}
 		avatarURL, err = h.storage.UploadFile("avatars", fileName, fileBytes)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Upload failed: " + err.Error()})
 			return
 		}
+	} else if !errors.Is(err, http.ErrMissingFile) {
+		// Log or handle other errors from c.FormFile, but ignore if file was just not provided
+		log.Printf("Error retrieving avatar file: %v", err)
 	}
 
 	displayName := c.PostForm("display_name")
+	bio := c.PostForm("bio")
+	username := c.PostForm("username") // Also allow username update
+
 	updateData := map[string]interface{}{}
 	if displayName != "" {
 		updateData["display_name"] = displayName
@@ -105,6 +130,13 @@ func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 	if avatarURL != "" {
 		updateData["avatar_url"] = avatarURL
 	}
+	if bio != "" {
+		updateData["bio"] = bio
+	}
+	if username != "" {
+		updateData["username"] = username
+	}
+
 
 	if len(updateData) > 0 {
 		user, err := h.auth.UpdateUser(token, updateData)
@@ -117,6 +149,173 @@ func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusBadRequest, gin.H{"error": "No updates provided"})
+}
+
+// --- New Handlers for Users, Friends, Groups ---
+
+func (h *Handler) HandleSearchUsers(c *gin.Context) {
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Query parameter 'q' is required"})
+		return
+	}
+
+	profiles, err := h.auth.SearchUsers(query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to search users: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, profiles)
+}
+
+func (h *Handler) HandleGetProfile(c *gin.Context) {
+	username := c.Param("username")
+	if username == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username parameter is required"})
+		return
+	}
+
+	profile, err := h.auth.GetProfile(username)
+	if err != nil {
+		if errors.Is(err, errors.New("user profile not found")) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get user profile: %v", err)})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, profile)
+}
+
+func (h *Handler) HandleAddFriend(c *gin.Context) {
+	token := c.GetString("token")
+	currentUserID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		FriendUsername string `json:"friend_username" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Use the GetUserByUsername method from the authenticator
+	friendUser, err := h.auth.GetUserByUsername(req.FriendUsername)
+	if err != nil {
+		if errors.Is(err, errors.New("user not found")) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to find user: %v", err)})
+		}
+		return
+	}
+
+	err = h.auth.AddFriend(currentUserID, friendUser.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Friend request sent successfully"})
+}
+
+func (h *Handler) HandleCreateGroup(c *gin.Context) {
+	token := c.GetString("token")
+	creatorID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	group, err := h.auth.CreateGroup(req.Name, req.Description, creatorID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, group)
+}
+
+func (h *Handler) HandleJoinGroup(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GroupID string `json:"group_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = h.auth.JoinGroup(req.GroupID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully joined group"})
+}
+
+func (h *Handler) HandleGetMyGroups(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	groups, err := h.auth.GetMyGroups(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to retrieve groups: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, groups)
+}
+
+// Helper functions
+func (h *Handler) getUserIDFromToken(token string) (string, error) {
+	if token == "" {
+		return "", errors.New("authorization token missing")
+	}
+	// Assuming token is in "Bearer <token>" format
+	parts := strings.Split(token, " ")
+	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+		return "", errors.New("invalid authorization format")
+	}
+	token = parts[1]
+
+	user, err := h.auth.GetUserFromToken(token)
+	if err != nil {
+		return "", err
+	}
+	return user.ID, nil
+}
+
+// getUserByUsername retrieves user by username using the authenticator.
+func (h *Handler) getUserByUsername(username string) (*models.User, error) {
+	// Delegate the call to the authenticator
+	return h.auth.GetUserByUsername(username)
 }
 
 // Helper for unique filename

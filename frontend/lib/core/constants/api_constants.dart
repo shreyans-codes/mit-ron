@@ -6,4 +6,16 @@ class ApiConstants {
   static const String signup = '/signup';
   static const String signout = '/signout';
   static const String profileUpdate = '/profile/update';
+
+  // User Endpoints
+  static const String userSearch = '/users/search';
+  static const String profile = '/profile'; // Will be used as /profile/:username
+
+  // Friends Endpoints
+  static const String addFriend = '/friends/add';
+
+  // Groups Endpoints
+  static const String createGroup = '/groups/create';
+  static const String joinGroup = '/groups/join';
+  static const String myGroups = '/groups/my';
 }

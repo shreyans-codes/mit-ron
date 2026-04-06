@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -42,7 +43,7 @@ func main() {
 
 	// CORS configuration
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
+		AllowOrigins:     []string{"*"}, // Adjust this in production
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -65,6 +66,18 @@ func main() {
 	{
 		protected.POST("/signout", handler.HandleSignout)
 		protected.POST("/profile/update", handler.HandleUpdateProfile)
+
+		// User profile and search
+		protected.GET("/users/search", handler.HandleSearchUsers)
+		protected.GET("/profile/:username", handler.HandleGetProfile)
+
+		// Friends
+		protected.POST("/friends/add", handler.HandleAddFriend)
+
+		// Groups
+		protected.POST("/groups/create", handler.HandleCreateGroup)
+		protected.POST("/groups/join", handler.HandleJoinGroup)
+		protected.GET("/groups/my", handler.HandleGetMyGroups)
 	}
 
 	port := os.Getenv("PORT")

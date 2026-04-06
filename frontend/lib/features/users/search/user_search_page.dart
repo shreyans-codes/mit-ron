@@ -1,0 +1,139 @@
+// frontend/lib/features/users/search/user_search_page.dart
+import 'package:flutter/material.dart';
+import 'package:mitron/models/profile.dart';
+import 'package:mitron/services/auth_service.dart';
+import 'package:mitron/services/cache_service.dart'; // Assuming CacheService is used here
+
+class UserSearchPage extends StatefulWidget {
+  const UserSearchPage({super.key});
+
+  static const routeName = '/user-search';
+
+  @override
+  State<UserSearchPage> createState() => _UserSearchPageState();
+}
+
+class _UserSearchPageState extends State<UserSearchPage> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Profile> _searchResults = [];
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _performSearch() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _errorMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Check cache first
+      final cachedProfiles = await AuthService.instance.getCachedProfiles();
+      // This is a basic cache check. A real implementation would match the query.
+      // For now, if cache exists and is valid, we might use it, but direct API call is safer for fresh results.
+      // We will fetch fresh results and update cache if successful.
+
+      final profiles = await AuthService.instance.searchUsers(query);
+      setState(() {
+        _searchResults = profiles;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Widget _buildProfileCard(Profile profile) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundImage: profile.avatarUrl != null ? NetworkImage(profile.avatarUrl!) : null,
+          child: profile.avatarUrl == null ? const Icon(Icons.person) : null,
+        ),
+        title: Text(profile.displayName.isEmpty ? profile.username : profile.displayName),
+        subtitle: Text('@${profile.username}
+${profile.bio}'), // Display username and bio
+        onTap: () {
+          // TODO: Navigate to user profile page
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Tapped on ${profile.username}')),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Search Users'),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search by username or name...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          _performSearch(); // Clear results when text is cleared
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onChanged: (value) {
+                // Trigger search on text change, maybe with debounce in a real app
+                _performSearch();
+              },
+            ),
+          ),
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (_errorMessage != null)
+            Center(child: Text('Error: $_errorMessage'))
+          else if (_searchResults.isEmpty && _searchController.text.isNotEmpty)
+            const Center(child: Text('No users found.'))
+          else
+            Expanded(
+              child: ListView.builder(
+                itemCount: _searchResults.length,
+                itemBuilder: (context, index) {
+                  return _buildProfileCard(_searchResults[index]);
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
