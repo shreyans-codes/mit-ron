@@ -622,6 +622,35 @@ func (p *PostgresAuthenticator) GetGroupMembers(groupID string) ([]models.Profil
 	return profiles, nil
 }
 
+func (p *PostgresAuthenticator) DeleteGroup(groupID, userID string) error {
+	ctx := context.Background()
+
+	var creatorID string
+	err := p.pool.QueryRow(ctx, "SELECT creator_id FROM public.groups WHERE id = $1", groupID).Scan(&creatorID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("group not found")
+		}
+		return fmt.Errorf("database error checking group: %v", err)
+	}
+
+	if creatorID != userID {
+		return errors.New("only the group creator can delete this group")
+	}
+
+	_, err = p.pool.Exec(ctx, "DELETE FROM public.group_members WHERE group_id = $1", groupID)
+	if err != nil {
+		return fmt.Errorf("failed to delete group members: %v", err)
+	}
+
+	_, err = p.pool.Exec(ctx, "DELETE FROM public.groups WHERE id = $1", groupID)
+	if err != nil {
+		return fmt.Errorf("failed to delete group: %v", err)
+	}
+
+	return nil
+}
+
 func (p *PostgresAuthenticator) getGroupByID(groupID string) (*models.Group, error) {
 	query := `
 		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COUNT(gm.user_id) AS member_count

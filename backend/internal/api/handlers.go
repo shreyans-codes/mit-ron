@@ -354,6 +354,39 @@ func (h *Handler) HandleGetGroupMembers(c *gin.Context) {
 	c.JSON(http.StatusOK, profiles)
 }
 
+func (h *Handler) HandleDeleteGroup(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GroupID string `json:"group_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = h.auth.DeleteGroup(req.GroupID, userID)
+	if err != nil {
+		if err.Error() == "only the group creator can delete this group" {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		if err.Error() == "group not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Group deleted successfully"})
+}
+
 // Helper functions
 func (h *Handler) getUserIDFromToken(token string) (string, error) {
 	token = strings.TrimSpace(token)

@@ -19,5 +19,6 @@ type Authenticator interface {
 	JoinGroup(groupID, userID string) error
 	GetMyGroups(userID string) ([]models.Group, error)
 	GetGroupMembers(groupID string) ([]models.Profile, error)
+	DeleteGroup(groupID, userID string) error
 	GetProfile(username string) (*models.Profile, error)
 }

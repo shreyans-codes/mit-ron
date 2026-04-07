@@ -5,7 +5,8 @@ import 'group_info_page.dart';
 
 class GroupDetailsPage extends StatefulWidget {
   final Group group;
-  const GroupDetailsPage({super.key, required this.group});
+  final VoidCallback? onGroupDeleted;
+  const GroupDetailsPage({super.key, required this.group, this.onGroupDeleted});
 
   static const String routeName = '/group-details';
 
@@ -31,6 +32,55 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
       });
       _messageController.clear();
     });
+  }
+
+  bool get _isCreator {
+    final currentUserId = AuthService.instance.currentUser?.id;
+    return currentUserId == widget.group.creatorId;
+  }
+
+  Future<void> _deleteGroup() async {
+    try {
+      await AuthService.instance.deleteGroup(widget.group.id);
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        widget.onGroupDeleted?.call();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to delete group: $e')));
+      }
+    }
+  }
+
+  void _showDeleteConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Group'),
+        content: Text(
+          'Are you sure you want to delete "${widget.group.name}"? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () {
+              Navigator.of(context).pop();
+              _deleteGroup();
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -86,6 +136,25 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
               },
             ),
           ),
+          if (_isCreator) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _showDeleteConfirmation,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Delete Group'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           _MessageInput(controller: _messageController, onSend: _sendMessage),
         ],
       ),
