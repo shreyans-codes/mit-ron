@@ -264,6 +264,12 @@ class AuthService {
       return cachedGroups;
     }
 
+    return refreshGroups();
+  }
+
+  Future<List<Group>> refreshGroups() async {
+    if (_token == null) throw AuthException('Not authenticated');
+
     final response = await http.get(
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.myGroups}'),
       headers: {'Authorization': 'Bearer ${_token!.trim()}'},

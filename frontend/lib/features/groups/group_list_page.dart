@@ -18,6 +18,7 @@ class GroupListPage extends StatefulWidget {
 class _GroupListPageState extends State<GroupListPage> {
   List<Group> _groups = [];
   bool _isLoading = true;
+  bool _isRefreshing = false;
   String? _errorMessage;
 
   @override
@@ -33,15 +34,12 @@ class _GroupListPageState extends State<GroupListPage> {
     });
 
     try {
-      // Check cache first
       final cachedGroups = await AuthService.instance.getCachedGroups();
       if (cachedGroups.isNotEmpty) {
         setState(() {
           _groups = cachedGroups;
           _isLoading = false;
         });
-        // Optionally, still fetch from network to refresh data if cache is stale
-        // For now, just use cache if available.
         return;
       }
 
@@ -49,7 +47,6 @@ class _GroupListPageState extends State<GroupListPage> {
       setState(() {
         _groups = groups;
       });
-      // Cache the fetched groups if successful
       if (groups.isNotEmpty) {
         await AuthService.instance.cacheGroups(groups);
       }
@@ -61,6 +58,36 @@ class _GroupListPageState extends State<GroupListPage> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshGroups() async {
+    setState(() {
+      _isRefreshing = true;
+    });
+
+    try {
+      final groups = await AuthService.instance.refreshGroups();
+      setState(() {
+        _groups = groups;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Refresh successful')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to refresh: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
         });
       }
     }
@@ -116,31 +143,36 @@ class _GroupListPageState extends State<GroupListPage> {
           ? const Center(
               child: Text('You are not in any groups yet. Create or join one!'),
             )
-          : ListView.builder(
-              itemCount: _groups.length,
-              itemBuilder: (context, index) {
-                final group = _groups[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: ListTile(
-                    title: Text(group.name),
-                    subtitle: Text(
-                      group.description ?? 'No description provided.',
+          : RefreshIndicator(
+              onRefresh: _refreshGroups,
+              notificationPredicate: (notification) => true,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: _groups.length,
+                itemBuilder: (context, index) {
+                  final group = _groups[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-                    trailing: Text('Members: ${group.memberCount}'),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => GroupChatPage(group: group),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
+                    child: ListTile(
+                      title: Text(group.name),
+                      subtitle: Text(
+                        group.description ?? 'No description provided.',
+                      ),
+                      trailing: Text('Members: ${group.memberCount}'),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => GroupChatPage(group: group),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
             ),
     );
   }

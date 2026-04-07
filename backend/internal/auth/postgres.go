@@ -322,7 +322,7 @@ func (p *PostgresAuthenticator) SearchUsers(query string) ([]models.Profile, err
 	}
 	defer rows.Close()
 
-	var profiles []models.Profile
+	var profiles = []models.Profile{}
 	for rows.Next() {
 		var profile models.Profile
 		if err := rows.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio); err != nil {
@@ -572,7 +572,7 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 	}
 	defer rows.Close()
 
-	var groups []models.Group
+	var groups = []models.Group{}
 	for rows.Next() {
 		var group models.Group
 		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &group.MemberCount); err != nil {
@@ -605,7 +605,7 @@ func (p *PostgresAuthenticator) GetGroupMembers(groupID string) ([]models.Profil
 	}
 	defer rows.Close()
 
-	var profiles []models.Profile
+	var profiles = []models.Profile{}
 	for rows.Next() {
 		var profile models.Profile
 		if err := rows.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio); err != nil {
