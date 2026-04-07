@@ -68,4 +68,11 @@ type GroupMember struct {
 	GroupID  string    `json:"group_id"`
 	UserID   string    `json:"user_id"`
 	JoinedAt time.Time `json:"joined_at"`
+	Flairs   []Flair   `json:"flairs,omitempty"`
+}
+
+type Flair struct {
+	ID      string  `json:"id"`
+	Name    string  `json:"name"`
+	GroupID *string `json:"group_id,omitempty"` // null for global flairs
 }

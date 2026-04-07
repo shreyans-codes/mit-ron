@@ -2,8 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:mitron/models/group.dart';
 import 'package:mitron/services/auth_service.dart';
-import 'create_group_page.dart'; // Import CreateGroupPage
-import 'join_group_page.dart';   // Import JoinGroupPage
+import 'create_group_page.dart';
+import 'join_group_page.dart';
+import 'group_details_page.dart';
 
 class GroupListPage extends StatefulWidget {
   const GroupListPage({super.key});
@@ -118,9 +119,10 @@ class _GroupListPageState extends State<GroupListPage> {
                             subtitle: Text(group.description ?? 'No description provided.'),
                             trailing: Text('Members: ${group.memberCount}'),
                             onTap: () {
-                              // TODO: Navigate to Group Details screen
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('View details of ${group.name}')),
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => GroupDetailsPage(group: group),
+                                ),
                               );
                             },
                           ),

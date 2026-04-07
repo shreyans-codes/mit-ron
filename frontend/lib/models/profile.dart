@@ -5,6 +5,8 @@ class Profile {
   final String displayName;
   final String? avatarUrl;
   final String bio;
+  final bool isFriend;
+  final String? friendStatus; // 'pending', 'accepted', etc.
 
   Profile({
     required this.id,
@@ -12,6 +14,8 @@ class Profile {
     required this.displayName,
     this.avatarUrl,
     this.bio = '',
+    this.isFriend = false,
+    this.friendStatus,
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) {
@@ -21,6 +25,8 @@ class Profile {
       displayName: json['display_name'] ?? '',
       avatarUrl: json['avatar_url'],
       bio: json['bio'] ?? '',
+      isFriend: json['is_friend'] ?? false,
+      friendStatus: json['friend_status'],
     );
   }
 
@@ -31,6 +37,8 @@ class Profile {
       'display_name': displayName,
       'avatar_url': avatarUrl,
       'bio': bio,
+      'is_friend': isFriend,
+      'friend_status': friendStatus,
     };
   }
 }

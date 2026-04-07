@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
+import '../../settings/update_profile_page.dart';
 
 class UserProfilePage extends StatefulWidget {
   final String username;
@@ -48,9 +49,23 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isOwnProfile = AuthService.instance.currentUser?.id == _profile?.id;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_profile?.displayName ?? widget.username),
+        actions: [
+          if (isOwnProfile)
+            IconButton(
+              icon: const Icon(Icons.edit_rounded),
+              onPressed: () async {
+                final result = await Navigator.of(context).pushNamed(UpdateProfilePage.routeName);
+                if (result != null) {
+                  _fetchProfile();
+                }
+              },
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -58,58 +73,81 @@ class _UserProfilePageState extends State<UserProfilePage> {
               ? Center(child: Text('Error: $_errorMessage'))
               : _profile == null
                   ? const Center(child: Text('Profile not found.'))
-                  : Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundImage: _profile!.avatarUrl != null
-                                ? NetworkImage(_profile!.avatarUrl!)
-                                : null,
-                            child: _profile!.avatarUrl == null
-                                ? const Icon(Icons.person, size: 50)
-                                : null,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _profile!.displayName.isEmpty ? _profile!.username : _profile!.displayName,
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          Text(
-                            '@${_profile!.username}',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey),
-                          ),
-                          if (_profile!.bio.isNotEmpty) ...[
-                            const SizedBox(height: 16),
+                  : Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircleAvatar(
+                              radius: 60,
+                              backgroundImage: _profile!.avatarUrl != null
+                                  ? NetworkImage(_profile!.avatarUrl!)
+                                  : null,
+                              child: _profile!.avatarUrl == null
+                                  ? const Icon(Icons.person, size: 60)
+                                  : null,
+                            ),
+                            const SizedBox(height: 24),
                             Text(
-                              _profile!.bio,
+                              _profile!.displayName.isEmpty ? _profile!.username : _profile!.displayName,
+                              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                               textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodyMedium,
                             ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '@${_profile!.username}',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Colors.grey,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                            if (_profile!.bio.isNotEmpty) ...[
+                              const SizedBox(height: 24),
+                              Text(
+                                _profile!.bio,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                            ],
+                            const SizedBox(height: 40),
+                            // Add Friend button logic
+                            if (!isOwnProfile && !_profile!.isFriend) 
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed: _profile!.friendStatus == 'pending' 
+                                    ? null 
+                                    : () async {
+                                        try {
+                                          await AuthService.instance.addFriend(_profile!.username);
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Friend request sent to ${_profile!.username}')),
+                                          );
+                                          _fetchProfile(); // Refresh to show pending status
+                                        } catch (e) {
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Error: ${e.toString()}')),
+                                          );
+                                        }
+                                      },
+                                  icon: Icon(_profile!.friendStatus == 'pending' ? Icons.access_time_rounded : Icons.person_add_rounded),
+                                  label: Text(_profile!.friendStatus == 'pending' ? 'Request Pending' : 'Add Friend'),
+                                ),
+                              ),
+                            if (!isOwnProfile && _profile!.isFriend)
+                              const Chip(
+                                avatar: Icon(Icons.check_circle_outline_rounded, size: 20, color: Colors.green),
+                                label: Text('Friends'),
+                              ),
                           ],
-                          const Spacer(),
-                          // Add Friend button logic here
-                          if (AuthService.instance.currentUser?.id != _profile?.id) // Don't show "Add Friend" for own profile
-                            ElevatedButton(
-                              onPressed: () async {
-                                try {
-                                  await AuthService.instance.addFriend(_profile!.username);
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Friend request sent to ${_profile!.username}')),
-                                  );
-                                } catch (e) {
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Error sending friend request: ${e.toString()}')),
-                                  );
-                                }
-                              },
-                              child: const Text('Add Friend'),
-                            ),
-                        ],
+                        ),
                       ),
                     ),
     );

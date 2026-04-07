@@ -21,6 +21,7 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
 
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _name;
+  late TextEditingController _bio;
   File? _imageFile;
   final _picker = ImagePicker();
 
@@ -32,6 +33,7 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
     if (!_initialized) {
       _user = AuthService.instance.currentUser!;
       _name = TextEditingController(text: _user.displayName);
+      _bio = TextEditingController(text: _user.bio);
       _initialized = true;
     }
   }
@@ -39,6 +41,7 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
   @override
   void dispose() {
     _name.dispose();
+    _bio.dispose();
     super.dispose();
   }
 
@@ -58,6 +61,7 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
     try {
       final updatedUser = await AuthService.instance.updateProfile(
         displayName: _name.text.trim(),
+        bio: _bio.text.trim(),
         avatar: _imageFile,
       );
       
@@ -136,6 +140,16 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
                 ),
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Enter your name' : null,
+              ),
+              const SizedBox(height: 24),
+              TextFormField(
+                controller: _bio,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Bio',
+                  prefixIcon: Icon(Icons.info_outline_rounded),
+                  alignLabelWithHint: true,
+                ),
               ),
               const SizedBox(height: 32),
               FilledButton(
