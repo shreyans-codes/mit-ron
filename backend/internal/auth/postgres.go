@@ -622,6 +622,35 @@ func (p *PostgresAuthenticator) GetGroupMembers(groupID string) ([]models.Profil
 	return profiles, nil
 }
 
+func (p *PostgresAuthenticator) AddGroupMember(groupID, userID string) error {
+	ctx := context.Background()
+
+	var groupExists bool
+	err := p.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.groups WHERE id = $1)", groupID).Scan(&groupExists)
+	if err != nil {
+		return fmt.Errorf("database error checking group: %v", err)
+	}
+	if !groupExists {
+		return errors.New("group not found")
+	}
+
+	var memberExists bool
+	err = p.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.group_members WHERE group_id = $1 AND user_id = $2)", groupID, userID).Scan(&memberExists)
+	if err != nil {
+		return fmt.Errorf("database error checking membership: %v", err)
+	}
+	if memberExists {
+		return errors.New("user is already a member of this group")
+	}
+
+	_, err = p.pool.Exec(ctx, "INSERT INTO public.group_members (group_id, user_id) VALUES ($1, $2)", groupID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to add member: %v", err)
+	}
+
+	return nil
+}
+
 func (p *PostgresAuthenticator) DeleteGroup(groupID, userID string) error {
 	ctx := context.Background()
 

@@ -6,7 +6,8 @@ import 'features/auth/login_page.dart';
 import 'features/auth/signup_page.dart';
 import 'features/friends/friends_list_page.dart'; // Import FriendsListPage
 import 'features/groups/create_group_page.dart'; // Import CreateGroupPage
-import 'features/groups/group_info_page.dart'; // Import GroupInfoPage
+import 'features/groups/group_details_page.dart'; // Import GroupDetailsPage
+import 'features/groups/group_chat_page.dart'; // Import GroupChatPage
 import 'features/groups/group_list_page.dart'; // Import GroupListPage
 import 'features/groups/join_group_page.dart'; // Import JoinGroupPage
 import 'features/settings/settings_page.dart';
@@ -73,12 +74,12 @@ class MitronApp extends StatelessWidget {
                   const CreateGroupPage(), // Add route for CreateGroupPage
               JoinGroupPage.routeName: (_) =>
                   const JoinGroupPage(), // Add route for JoinGroupPage
-              GroupInfoPage.routeName: (context) {
+              GroupDetailsPage.routeName: (context) {
                 final args = ModalRoute.of(context)!.settings.arguments;
                 if (args is Group) {
-                  return GroupInfoPage(group: args);
+                  return GroupDetailsPage(group: args);
                 }
-                return GroupInfoPage(
+                return GroupDetailsPage(
                   group: Group(
                     id: '',
                     name: '',

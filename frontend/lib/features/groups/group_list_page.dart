@@ -4,7 +4,7 @@ import 'package:mitron/models/group.dart';
 import 'package:mitron/services/auth_service.dart';
 import 'create_group_page.dart';
 import 'join_group_page.dart';
-import 'group_details_page.dart';
+import 'group_chat_page.dart';
 
 class GroupListPage extends StatefulWidget {
   const GroupListPage({super.key});
@@ -75,12 +75,16 @@ class _GroupListPageState extends State<GroupListPage> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () async {
-              final createdGroup = await Navigator.of(context).pushNamed(CreateGroupPage.routeName);
+              final createdGroup = await Navigator.of(
+                context,
+              ).pushNamed(CreateGroupPage.routeName);
               if (!context.mounted) return;
               if (createdGroup != null && createdGroup is Group) {
                 _fetchGroups();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Group "${createdGroup.name}" created!')),
+                  SnackBar(
+                    content: Text('Group "${createdGroup.name}" created!'),
+                  ),
                 );
               }
             },
@@ -89,7 +93,9 @@ class _GroupListPageState extends State<GroupListPage> {
           IconButton(
             icon: const Icon(Icons.group_add), // Changed to a valid icon
             onPressed: () async {
-              final joined = await Navigator.of(context).pushNamed(JoinGroupPage.routeName);
+              final joined = await Navigator.of(
+                context,
+              ).pushNamed(JoinGroupPage.routeName);
               if (!context.mounted) return;
               if (joined != null && joined is bool && joined) {
                 _fetchGroups();
@@ -105,30 +111,37 @@ class _GroupListPageState extends State<GroupListPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
-              ? Center(child: Text('Error: $_errorMessage'))
-              : _groups.isEmpty
-                  ? const Center(child: Text('You are not in any groups yet. Create or join one!'))
-                  : ListView.builder(
-                      itemCount: _groups.length,
-                      itemBuilder: (context, index) {
-                        final group = _groups[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: ListTile(
-                            title: Text(group.name),
-                            subtitle: Text(group.description ?? 'No description provided.'),
-                            trailing: Text('Members: ${group.memberCount}'),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) => GroupDetailsPage(group: group),
-                                ),
-                              );
-                            },
-                          ),
-                        );
-                      },
+          ? Center(child: Text('Error: $_errorMessage'))
+          : _groups.isEmpty
+          ? const Center(
+              child: Text('You are not in any groups yet. Create or join one!'),
+            )
+          : ListView.builder(
+              itemCount: _groups.length,
+              itemBuilder: (context, index) {
+                final group = _groups[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: ListTile(
+                    title: Text(group.name),
+                    subtitle: Text(
+                      group.description ?? 'No description provided.',
                     ),
+                    trailing: Text('Members: ${group.memberCount}'),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => GroupChatPage(group: group),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
     );
   }
 }
