@@ -18,5 +18,6 @@ type Authenticator interface {
 	CreateGroup(name, description, creatorID string) (*models.Group, error)
 	JoinGroup(groupID, userID string) error
 	GetMyGroups(userID string) ([]models.Group, error)
+	GetGroupMembers(groupID string) ([]models.Profile, error)
 	GetProfile(username string) (*models.Profile, error)
 }

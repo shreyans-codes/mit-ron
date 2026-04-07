@@ -45,7 +45,10 @@ class AuthService {
     final response = await http.post(
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.login}'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'login_identifier': loginIdentifier, 'password': password}),
+      body: jsonEncode({
+        'login_identifier': loginIdentifier,
+        'password': password,
+      }),
     );
 
     if (response.statusCode == 200) {
@@ -59,11 +62,19 @@ class AuthService {
     }
   }
 
-  Future<AuthSession> signUp(String username, String email, String password) async {
+  Future<AuthSession> signUp(
+    String username,
+    String email,
+    String password,
+  ) async {
     final response = await http.post(
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.signup}'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'username': username, 'email': email, 'password': password}),
+      body: jsonEncode({
+        'username': username,
+        'email': email,
+        'password': password,
+      }),
     );
 
     if (response.statusCode == 200) {
@@ -92,10 +103,18 @@ class AuthService {
   }
 
   // Handles profile updates, including text fields and optional avatar file
-  Future<AuthUser> updateProfile({String? displayName, String? bio, String? username, File? avatar}) async {
+  Future<AuthUser> updateProfile({
+    String? displayName,
+    String? bio,
+    String? username,
+    File? avatar,
+  }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
-    var request = http.MultipartRequest('POST', Uri.parse('${ApiConstants.baseUrl}${ApiConstants.profileUpdate}'));
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.profileUpdate}'),
+    );
     request.headers['Authorization'] = 'Bearer ${_token!.trim()}';
 
     if (displayName != null) {
@@ -109,7 +128,9 @@ class AuthService {
     }
 
     if (avatar != null) {
-      request.files.add(await http.MultipartFile.fromPath('avatar', avatar.path));
+      request.files.add(
+        await http.MultipartFile.fromPath('avatar', avatar.path),
+      );
     }
 
     if (request.fields.isEmpty && request.files.isEmpty) {
@@ -124,7 +145,8 @@ class AuthService {
       await _saveCurrentUser(updatedUser);
       return updatedUser;
     } else {
-      final error = jsonDecode(response.body)['error'] ?? 'Profile update failed';
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Profile update failed';
       throw AuthException(error);
     }
   }
@@ -134,10 +156,9 @@ class AuthService {
     return updateProfile(avatar: avatar);
   }
 
-
   Future<List<Profile>> searchUsers(String query) async {
     if (_token == null) throw AuthException('Not authenticated');
-    
+
     final cachedProfiles = await getCachedProfiles();
     if (cachedProfiles.isNotEmpty) {
       return cachedProfiles;
@@ -170,7 +191,8 @@ class AuthService {
     if (response.statusCode == 200) {
       return _profileFromJson(jsonDecode(response.body));
     } else {
-      final error = jsonDecode(response.body)['error'] ?? 'Failed to fetch profile';
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to fetch profile';
       throw AuthException(error);
     }
   }
@@ -188,7 +210,8 @@ class AuthService {
     );
 
     if (response.statusCode != 200) {
-      final error = jsonDecode(response.body)['error'] ?? 'Failed to add friend';
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to add friend';
       throw AuthException(error);
     }
   }
@@ -208,7 +231,8 @@ class AuthService {
     if (response.statusCode == 201) {
       return _groupFromJson(jsonDecode(response.body));
     } else {
-      final error = jsonDecode(response.body)['error'] ?? 'Failed to create group';
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to create group';
       throw AuthException(error);
     }
   }
@@ -226,14 +250,15 @@ class AuthService {
     );
 
     if (response.statusCode != 200) {
-      final error = jsonDecode(response.body)['error'] ?? 'Failed to join group';
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to join group';
       throw AuthException(error);
     }
   }
 
   Future<List<Group>> getMyGroups() async {
     if (_token == null) throw AuthException('Not authenticated');
-    
+
     final cachedGroups = await getCachedGroups();
     if (cachedGroups.isNotEmpty) {
       return cachedGroups;
@@ -250,7 +275,28 @@ class AuthService {
       await cacheGroups(groups);
       return groups;
     } else {
-      final error = jsonDecode(response.body)['error'] ?? 'Failed to fetch groups';
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to fetch groups';
+      throw AuthException(error);
+    }
+  }
+
+  Future<List<Profile>> getGroupMembers(String groupId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse(
+        '${ApiConstants.baseUrl}${ApiConstants.groupMembers}?group_id=$groupId',
+      ),
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((item) => _profileFromJson(item)).toList();
+    } else {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to fetch group members';
       throw AuthException(error);
     }
   }
@@ -263,14 +309,19 @@ class AuthService {
       headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
     if (response.statusCode == 200) {
-      final Map<String, dynamic> data = jsonDecode(response.body) as Map<String, dynamic>;
+      final Map<String, dynamic> data =
+          jsonDecode(response.body) as Map<String, dynamic>;
       return FriendLists.fromJson(data);
     }
-    final error = jsonDecode(response.body)['error'] ?? 'Failed to fetch friends';
+    final error =
+        jsonDecode(response.body)['error'] ?? 'Failed to fetch friends';
     throw AuthException(error is String ? error : error.toString());
   }
 
-  Future<void> respondToFriendRequest({required String initiatorId, required bool accept}) async {
+  Future<void> respondToFriendRequest({
+    required String initiatorId,
+    required bool accept,
+  }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
     final response = await http.post(
@@ -284,7 +335,9 @@ class AuthService {
     if (response.statusCode != 200) {
       final body = jsonDecode(response.body);
       final error = body is Map<String, dynamic> ? body['error'] : null;
-      throw AuthException(error?.toString() ?? 'Failed to respond to friend request');
+      throw AuthException(
+        error?.toString() ?? 'Failed to respond to friend request',
+      );
     }
   }
 
@@ -298,7 +351,10 @@ class AuthService {
       'timestamp': DateTime.now().toIso8601String(),
       'profiles': profiles.map((p) => _profileToJson(p)).toList(),
     };
-    await CacheService.instance.saveData(_cachedProfilesKey, jsonEncode(cacheEntry));
+    await CacheService.instance.saveData(
+      _cachedProfilesKey,
+      jsonEncode(cacheEntry),
+    );
   }
 
   Future<List<Profile>> getCachedProfiles() async {
@@ -327,7 +383,10 @@ class AuthService {
       'timestamp': DateTime.now().toIso8601String(),
       'groups': groups.map((g) => _groupToJson(g)).toList(),
     };
-    await CacheService.instance.saveData(_cachedGroupsKey, jsonEncode(cacheEntry));
+    await CacheService.instance.saveData(
+      _cachedGroupsKey,
+      jsonEncode(cacheEntry),
+    );
   }
 
   Future<List<Group>> getCachedGroups() async {
@@ -368,7 +427,9 @@ class AuthService {
       displayName: json['display_name'] as String? ?? '',
       profilePictureUrl: json['avatar_url'] as String?,
       bio: json['bio'] as String? ?? '',
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(), // Fixed: createdAt handled
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(), // Fixed: createdAt handled
     );
   }
 

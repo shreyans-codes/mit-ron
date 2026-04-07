@@ -69,8 +69,8 @@ func (p *PostgresAuthenticator) Signup(username, email, password string) (*model
 		return &models.AuthResponse{
 			AccessToken: token,
 			User: models.User{ // Minimal user info if fetch fails
-				ID:    userID,
-				Email: email,
+				ID:       userID,
+				Email:    email,
 				Username: username,
 			},
 		}, nil
@@ -197,7 +197,6 @@ func (p *PostgresAuthenticator) UpdateUser(token string, updateData map[string]i
 		i++
 	}
 
-
 	if len(updateFields) == 0 {
 		return nil, errors.New("no valid update data provided")
 	}
@@ -297,7 +296,6 @@ func (p *PostgresAuthenticator) GetUserByUsername(username string) (*models.User
 	log.Printf("Successfully fetched user by username: %s", username)
 	return &user, nil
 }
-
 
 func (p *PostgresAuthenticator) SearchUsers(query string) ([]models.Profile, error) {
 	if query == "" {
@@ -591,6 +589,39 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 	return groups, nil
 }
 
+func (p *PostgresAuthenticator) GetGroupMembers(groupID string) ([]models.Profile, error) {
+	query := `
+		SELECT u.id, u.username, COALESCE(u.display_name, ''), u.avatar_url, COALESCE(u.bio, '')
+		FROM public.group_members gm
+		JOIN public.users u ON u.id = gm.user_id
+		WHERE gm.group_id = $1
+		ORDER BY gm.user_id = (
+			SELECT creator_id FROM public.groups WHERE id = $1
+		) DESC, u.username ASC
+	`
+	rows, err := p.pool.Query(context.Background(), query, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get group members: %v", err)
+	}
+	defer rows.Close()
+
+	var profiles []models.Profile
+	for rows.Next() {
+		var profile models.Profile
+		if err := rows.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio); err != nil {
+			log.Printf("Error scanning group member row: %v", err)
+			continue
+		}
+		profiles = append(profiles, profile)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating group members: %v", err)
+	}
+
+	return profiles, nil
+}
+
 func (p *PostgresAuthenticator) getGroupByID(groupID string) (*models.Group, error) {
 	query := `
 		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COUNT(gm.user_id) AS member_count
@@ -667,4 +698,3 @@ func stringValue(s *string) string {
 	}
 	return *s
 }
-

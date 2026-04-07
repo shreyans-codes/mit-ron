@@ -102,6 +102,7 @@ func main() {
 		protected.POST("/groups/create", handler.HandleCreateGroup)
 		protected.POST("/groups/join", handler.HandleJoinGroup)
 		protected.GET("/groups/my", handler.HandleGetMyGroups)
+		protected.GET("/groups/members", handler.HandleGetGroupMembers)
 	}
 
 	port := os.Getenv("PORT")

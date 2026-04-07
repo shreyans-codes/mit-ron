@@ -1,4 +1,6 @@
 // frontend/lib/models/profile.dart
+import 'group.dart';
+
 class Profile {
   final String id;
   final String username;
@@ -6,7 +8,8 @@ class Profile {
   final String? avatarUrl;
   final String bio;
   final bool isFriend;
-  final String? friendStatus; // 'pending', 'accepted', etc.
+  final String? friendStatus;
+  final List<Flair> flairs;
 
   Profile({
     required this.id,
@@ -16,6 +19,7 @@ class Profile {
     this.bio = '',
     this.isFriend = false,
     this.friendStatus,
+    this.flairs = const [],
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) {
@@ -27,6 +31,11 @@ class Profile {
       bio: json['bio'] ?? '',
       isFriend: json['is_friend'] ?? false,
       friendStatus: json['friend_status'],
+      flairs:
+          (json['flairs'] as List<dynamic>?)
+              ?.map((f) => Flair.fromJson(f as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 
@@ -39,6 +48,7 @@ class Profile {
       'bio': bio,
       'is_friend': isFriend,
       'friend_status': friendStatus,
+      'flairs': flairs.map((f) => f.toJson()).toList(),
     };
   }
 }

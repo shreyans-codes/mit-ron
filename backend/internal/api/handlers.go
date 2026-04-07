@@ -338,6 +338,22 @@ func (h *Handler) HandleGetMyGroups(c *gin.Context) {
 	c.JSON(http.StatusOK, groups)
 }
 
+func (h *Handler) HandleGetGroupMembers(c *gin.Context) {
+	groupID := c.Query("group_id")
+	if groupID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id is required"})
+		return
+	}
+
+	profiles, err := h.auth.GetGroupMembers(groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to retrieve group members: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, profiles)
+}
+
 // Helper functions
 func (h *Handler) getUserIDFromToken(token string) (string, error) {
 	token = strings.TrimSpace(token)

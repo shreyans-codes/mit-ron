@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/group.dart';
 import '../../services/auth_service.dart';
+import 'group_info_page.dart';
 
 class GroupDetailsPage extends StatefulWidget {
   final Group group;
@@ -36,21 +37,34 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.group.name),
-            Text(
-              '${widget.group.memberCount} members',
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-          ],
+        title: InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => GroupInfoPage(group: widget.group),
+              ),
+            );
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.group.name),
+              Text(
+                '${widget.group.memberCount} members',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+          ),
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline_rounded),
             onPressed: () {
-              // Show group info
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => GroupInfoPage(group: widget.group),
+                ),
+              );
             },
           ),
         ],
@@ -72,10 +86,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
               },
             ),
           ),
-          _MessageInput(
-            controller: _messageController,
-            onSend: _sendMessage,
-          ),
+          _MessageInput(controller: _messageController, onSend: _sendMessage),
         ],
       ),
     );
@@ -99,7 +110,9 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
-        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isMe
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           if (!isMe)
             Padding(
@@ -112,7 +125,9 @@ class _MessageBubble extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: isMe ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest,
+              color: isMe
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(20),
                 topRight: const Radius.circular(20),
@@ -120,7 +135,9 @@ class _MessageBubble extends StatelessWidget {
                 bottomRight: Radius.circular(isMe ? 0 : 20),
               ),
             ),
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
             child: Text(
               text,
               style: TextStyle(
@@ -167,7 +184,10 @@ class _MessageInput extends StatelessWidget {
                     borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                 ),
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => onSend(),
