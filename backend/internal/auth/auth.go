@@ -15,11 +15,12 @@ type Authenticator interface {
 	AddFriend(initiatorID, recipientID string) error
 	RespondToFriendRequest(recipientID, initiatorID string, accept bool) error
 	GetFriendLists(userID string) (*models.FriendLists, error)
-	CreateGroup(name, description, creatorID string) (*models.Group, error)
+	CreateGroup(name, description, creatorID, avatarURL string) (*models.Group, error)
 	JoinGroup(groupID, userID string) error
 	GetMyGroups(userID string) ([]models.Group, error)
 	GetGroupMembers(groupID string) ([]models.Profile, error)
 	AddGroupMember(groupID, userID string) error
 	DeleteGroup(groupID, userID string) error
 	GetProfile(username string) (*models.Profile, error)
+	GetProfileWithFriendshipStatus(requestingUserID, profileUsername string) (*models.ProfileWithStatus, error)
 }

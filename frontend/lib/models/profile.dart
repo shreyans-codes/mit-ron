@@ -10,6 +10,7 @@ class Profile {
   final bool isFriend;
   final String? friendStatus;
   final List<Flair> flairs;
+  final bool isCreator;
 
   Profile({
     required this.id,
@@ -20,9 +21,19 @@ class Profile {
     this.isFriend = false,
     this.friendStatus,
     this.flairs = const [],
+    this.isCreator = false,
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) {
+    final flairsList =
+        (json['flairs'] as List<dynamic>?)
+            ?.map((f) => Flair.fromJson(f as Map<String, dynamic>))
+            .toList() ??
+        [];
+    final isCreator = json['is_creator'] as bool? ?? false;
+    if (isCreator) {
+      flairsList.insert(0, Flair(id: 'admin', name: 'Admin', groupId: null));
+    }
     return Profile(
       id: json['id'],
       username: json['username'],
@@ -31,11 +42,8 @@ class Profile {
       bio: json['bio'] ?? '',
       isFriend: json['is_friend'] ?? false,
       friendStatus: json['friend_status'],
-      flairs:
-          (json['flairs'] as List<dynamic>?)
-              ?.map((f) => Flair.fromJson(f as Map<String, dynamic>))
-              .toList() ??
-          [],
+      flairs: flairsList,
+      isCreator: isCreator,
     );
   }
 
@@ -49,6 +57,7 @@ class Profile {
       'is_friend': isFriend,
       'friend_status': friendStatus,
       'flairs': flairs.map((f) => f.toJson()).toList(),
+      'is_creator': isCreator,
     };
   }
 }

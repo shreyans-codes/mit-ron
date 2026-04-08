@@ -168,17 +168,45 @@ func (h *Handler) HandleGetProfile(c *gin.Context) {
 		return
 	}
 
-	profile, err := h.auth.GetProfile(username)
+	token := c.GetString("token")
+	requestingUserID, err := h.getUserIDFromToken(token)
 	if err != nil {
-		if errors.Is(err, errors.New("user profile not found")) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get user profile: %v", err)})
-		}
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, profile)
+	targetUser, err := h.auth.GetUserByUsername(username)
+	isOwner := err == nil && targetUser.ID == requestingUserID
+
+	var profileWithStatus interface{}
+	if isOwner {
+		profile, err := h.auth.GetProfile(username)
+		if err != nil {
+			if errors.Is(err, errors.New("user profile not found")) {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get user profile: %v", err)})
+			}
+			return
+		}
+		profileWithStatus = models.ProfileWithStatus{
+			Profile:      *profile,
+			IsFriend:     false,
+			FriendStatus: nil,
+		}
+	} else {
+		profileWithStatus, err = h.auth.GetProfileWithFriendshipStatus(requestingUserID, username)
+		if err != nil {
+			if errors.Is(err, errors.New("user profile not found")) {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get user profile: %v", err)})
+			}
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, profileWithStatus)
 }
 
 func (h *Handler) HandleAddFriend(c *gin.Context) {
@@ -278,16 +306,44 @@ func (h *Handler) HandleCreateGroup(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Name        string `json:"name" binding:"required"`
-		Description string `json:"description"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	name := c.PostForm("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
 		return
 	}
+	description := c.PostForm("description")
+	avatarURL := ""
 
-	group, err := h.auth.CreateGroup(req.Name, req.Description, creatorID)
+	file, err := c.FormFile("avatar")
+	if err == nil {
+		openedFile, err := file.Open()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
+			return
+		}
+		defer openedFile.Close()
+
+		fileBytes, err := io.ReadAll(openedFile)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file"})
+			return
+		}
+
+		fileName := fmt.Sprintf("group_%d_%s", time.Now().UnixNano(), filepath.Base(file.Filename))
+		if h.storage == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Storage provider not initialized"})
+			return
+		}
+		avatarURL, err = h.storage.UploadFile("group-icons", fileName, fileBytes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Upload failed: " + err.Error()})
+			return
+		}
+	} else if !errors.Is(err, http.ErrMissingFile) {
+		log.Printf("Error retrieving group avatar: %v", err)
+	}
+
+	group, err := h.auth.CreateGroup(name, description, creatorID, avatarURL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

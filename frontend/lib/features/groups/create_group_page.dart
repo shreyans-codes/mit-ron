@@ -1,5 +1,7 @@
 // frontend/lib/features/groups/create_group_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mitron/services/auth_service.dart';
 
 class CreateGroupPage extends StatefulWidget {
@@ -15,6 +17,8 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _imagePicker = ImagePicker();
+  XFile? _groupIcon;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -23,6 +27,20 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
     _nameController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    final pickedFile = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 80,
+    );
+    if (pickedFile != null) {
+      setState(() {
+        _groupIcon = pickedFile;
+      });
+    }
   }
 
   Future<void> _createGroup() async {
@@ -36,12 +54,15 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
         final group = await AuthService.instance.createGroup(
           _nameController.text.trim(),
           description: _descriptionController.text.trim(),
+          avatarPath: _groupIcon?.path,
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Group "${group.name}" created successfully!')),
+            SnackBar(
+              content: Text('Group "${group.name}" created successfully!'),
+            ),
           );
-          Navigator.of(context).pop(group); // Return the created group
+          Navigator.of(context).pop(group);
         }
       } catch (e) {
         setState(() {
@@ -60,15 +81,63 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Group'),
-      ),
+      appBar: AppBar(title: const Text('Create Group')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
             children: [
+              GestureDetector(
+                onTap: _pickImage,
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer,
+                      backgroundImage: _groupIcon != null
+                          ? FileImage(File(_groupIcon!.path))
+                          : null,
+                      child: _groupIcon == null
+                          ? Icon(
+                              Icons.add_photo_alternate_outlined,
+                              size: 40,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onPrimaryContainer,
+                            )
+                          : null,
+                    ),
+                    if (_groupIcon != null)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.edit,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _pickImage,
+                child: Text(
+                  _groupIcon == null ? 'Add Group Icon' : 'Change Icon',
+                ),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(labelText: 'Group Name'),
@@ -82,14 +151,19 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(labelText: 'Description (Optional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Description (Optional)',
+                ),
                 maxLines: 3,
               ),
               const SizedBox(height: 24),
               if (_isLoading)
                 const CircularProgressIndicator()
               else if (_errorMessage != null)
-                Text('Error: $_errorMessage', style: const TextStyle(color: Colors.red))
+                Text(
+                  'Error: $_errorMessage',
+                  style: const TextStyle(color: Colors.red),
+                )
               else
                 ElevatedButton(
                   onPressed: _createGroup,

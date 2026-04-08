@@ -3,6 +3,7 @@ import '../../models/group.dart';
 import '../../models/profile.dart';
 import '../../models/friend_lists.dart';
 import '../../services/auth_service.dart';
+import '../../models/group.dart' show Flair;
 
 class GroupDetailsPage extends StatefulWidget {
   final Group group;
@@ -198,9 +199,12 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                     itemBuilder: (context, index) {
                       final member = _members[index];
                       final isCurrentUser = member.id == currentUserId;
+                      final isMemberCreator =
+                          member.id == widget.group.creatorId;
                       return _MemberTile(
                         member: member,
                         isCurrentUser: isCurrentUser,
+                        isCreator: isMemberCreator,
                       );
                     },
                   ),
@@ -229,12 +233,22 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
 class _MemberTile extends StatelessWidget {
   final Profile member;
   final bool isCurrentUser;
+  final bool isCreator;
 
-  const _MemberTile({required this.member, required this.isCurrentUser});
+  const _MemberTile({
+    required this.member,
+    required this.isCurrentUser,
+    required this.isCreator,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    final displayFlairs = List<Flair>.from(member.flairs);
+    if (isCreator) {
+      displayFlairs.insert(0, Flair(id: 'admin', name: 'Admin', groupId: null));
+    }
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -276,25 +290,30 @@ class _MemberTile extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (member.flairs.isNotEmpty) ...[
+                if (displayFlairs.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Wrap(
                     spacing: 4,
                     runSpacing: 4,
-                    children: member.flairs.map((flair) {
+                    children: displayFlairs.map((flair) {
+                      final isAdmin = flair.name == 'Admin';
                       return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.secondaryContainer,
+                          color: isAdmin
+                              ? theme.colorScheme.primaryContainer
+                              : theme.colorScheme.secondaryContainer,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           flair.name,
                           style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSecondaryContainer,
+                            color: isAdmin
+                                ? theme.colorScheme.onPrimaryContainer
+                                : theme.colorScheme.onSecondaryContainer,
                           ),
                         ),
                       );

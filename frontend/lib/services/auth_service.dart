@@ -216,17 +216,28 @@ class AuthService {
     }
   }
 
-  Future<Group> createGroup(String name, {String? description}) async {
+  Future<Group> createGroup(
+    String name, {
+    String? description,
+    String? avatarPath,
+  }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
-    final response = await http.post(
-      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.createGroup}'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${_token!.trim()}',
-      },
-      body: jsonEncode({'name': name, 'description': description}),
-    );
+    final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.createGroup}');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer ${_token!.trim()}';
+    request.fields['name'] = name;
+    if (description != null) {
+      request.fields['description'] = description;
+    }
+    if (avatarPath != null) {
+      request.files.add(
+        await http.MultipartFile.fromPath('avatar', avatarPath),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 201) {
       return _groupFromJson(jsonDecode(response.body));
@@ -496,6 +507,8 @@ class AuthService {
       displayName: json['display_name'] as String? ?? '',
       avatarUrl: json['avatar_url'] as String?,
       bio: json['bio'] as String? ?? '',
+      isFriend: json['is_friend'] as bool? ?? false,
+      friendStatus: json['friend_status'] as String?,
     );
   }
 

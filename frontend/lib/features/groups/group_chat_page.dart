@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/group.dart';
+import '../../services/auth_service.dart';
 import 'group_details_page.dart';
 
 class GroupChatPage extends StatefulWidget {
@@ -14,20 +15,36 @@ class GroupChatPage extends StatefulWidget {
 
 class _GroupChatPageState extends State<GroupChatPage> {
   final TextEditingController _messageController = TextEditingController();
-  final List<Map<String, dynamic>> _mockMessages = [
-    {'sender': 'Alice', 'text': 'Hey everyone!', 'isMe': false},
-    {'sender': 'Bob', 'text': 'Hello!', 'isMe': false},
-    {'sender': 'Me', 'text': 'Welcome to the group!', 'isMe': true},
-  ];
+  int _memberCount = 0;
+  bool _isLoadingMembers = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _memberCount = widget.group.memberCount;
+    _loadMemberCount();
+  }
+
+  Future<void> _loadMemberCount() async {
+    try {
+      final members = await AuthService.instance.getGroupMembers(
+        widget.group.id,
+      );
+      setState(() {
+        _memberCount = members.length;
+        _isLoadingMembers = false;
+      });
+    } catch (e) {
+      setState(() {
+        _memberCount = widget.group.memberCount;
+        _isLoadingMembers = false;
+      });
+    }
+  }
 
   void _sendMessage() {
     if (_messageController.text.trim().isEmpty) return;
     setState(() {
-      _mockMessages.add({
-        'sender': 'Me',
-        'text': _messageController.text.trim(),
-        'isMe': true,
-      });
       _messageController.clear();
     });
   }
@@ -40,7 +57,10 @@ class _GroupChatPageState extends State<GroupChatPage> {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => GroupDetailsPage(group: widget.group),
+                builder: (_) => GroupDetailsPage(
+                  group: widget.group,
+                  onMembersUpdated: _loadMemberCount,
+                ),
               ),
             );
           },
@@ -49,7 +69,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
             children: [
               Text(widget.group.name),
               Text(
-                '${widget.group.memberCount} members',
+                _isLoadingMembers ? '... members' : '$_memberCount members',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
@@ -61,7 +81,10 @@ class _GroupChatPageState extends State<GroupChatPage> {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => GroupDetailsPage(group: widget.group),
+                  builder: (_) => GroupDetailsPage(
+                    group: widget.group,
+                    onMembersUpdated: _loadMemberCount,
+                  ),
                 ),
               );
             },
@@ -73,15 +96,9 @@ class _GroupChatPageState extends State<GroupChatPage> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              reverse: true,
-              itemCount: _mockMessages.length,
+              itemCount: 0,
               itemBuilder: (context, index) {
-                final msg = _mockMessages[_mockMessages.length - 1 - index];
-                return _MessageBubble(
-                  sender: msg['sender'],
-                  text: msg['text'],
-                  isMe: msg['isMe'],
-                );
+                return const SizedBox.shrink();
               },
             ),
           ),

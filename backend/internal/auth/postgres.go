@@ -499,11 +499,15 @@ func (p *PostgresAuthenticator) GetFriendLists(userID string) (*models.FriendLis
 	return out, nil
 }
 
-func (p *PostgresAuthenticator) CreateGroup(name, description, creatorID string) (*models.Group, error) {
+func (p *PostgresAuthenticator) CreateGroup(name, description, creatorID, avatarURL string) (*models.Group, error) {
 	var groupID string
+	avatarURLPtr := &avatarURL
+	if avatarURL == "" {
+		avatarURLPtr = nil
+	}
 	err := p.pool.QueryRow(context.Background(),
-		"INSERT INTO public.groups (name, description, creator_id) VALUES ($1, $2, $3) RETURNING id",
-		name, description, creatorID).Scan(&groupID)
+		"INSERT INTO public.groups (name, description, creator_id, group_image_url) VALUES ($1, $2, $3, $4) RETURNING id",
+		name, description, creatorID, avatarURLPtr).Scan(&groupID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create group: %v", err)
 	}
@@ -682,20 +686,24 @@ func (p *PostgresAuthenticator) DeleteGroup(groupID, userID string) error {
 
 func (p *PostgresAuthenticator) getGroupByID(groupID string) (*models.Group, error) {
 	query := `
-		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COUNT(gm.user_id) AS member_count
+		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
 		FROM public.groups g
 		LEFT JOIN public.group_members gm ON g.id = gm.group_id
 		WHERE g.id = $1
-		GROUP BY g.id, g.name, g.description, g.creator_id, g.created_at
+		GROUP BY g.id, g.name, g.description, g.creator_id, g.created_at, g.group_image_url
 	`
 	row := p.pool.QueryRow(context.Background(), query, groupID)
 	var group models.Group
-	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &group.MemberCount)
+	var groupImageURL string
+	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &groupImageURL, &group.MemberCount)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("group not found")
 		}
 		return nil, fmt.Errorf("database error fetching group by ID: %v", err)
+	}
+	if groupImageURL != "" {
+		group.GroupImageURL = &groupImageURL
 	}
 	return &group, nil
 }
@@ -716,6 +724,61 @@ func (p *PostgresAuthenticator) GetProfile(username string) (*models.Profile, er
 		return nil, fmt.Errorf("database error fetching user profile: %v", err)
 	}
 	return &profile, nil
+}
+
+func (p *PostgresAuthenticator) GetProfileWithFriendshipStatus(requestingUserID, profileUsername string) (*models.ProfileWithStatus, error) {
+	profile, err := p.GetProfile(profileUsername)
+	if err != nil {
+		return nil, err
+	}
+
+	friendshipStatus, isFriend := p.checkFriendshipStatus(requestingUserID, profile.ID)
+
+	return &models.ProfileWithStatus{
+		Profile:      *profile,
+		IsFriend:     isFriend,
+		FriendStatus: friendshipStatus,
+	}, nil
+}
+
+func (p *PostgresAuthenticator) GetProfileByUserID(userID string) (*models.Profile, error) {
+	query := `
+		SELECT id, username, display_name, avatar_url, bio
+		FROM public.users
+		WHERE id = $1
+	`
+	row := p.pool.QueryRow(context.Background(), query, userID)
+	var profile models.Profile
+	err := row.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("user profile not found")
+		}
+		return nil, fmt.Errorf("database error fetching user profile: %v", err)
+	}
+	return &profile, nil
+}
+
+func (p *PostgresAuthenticator) checkFriendshipStatus(userID, otherUserID string) (*string, bool) {
+	if userID == otherUserID {
+		return nil, false
+	}
+
+	var status string
+	err := p.pool.QueryRow(context.Background(), `
+		SELECT status::text FROM public.friends
+		WHERE (initiator_id = $1 AND recipient_id = $2) OR (initiator_id = $2 AND recipient_id = $1)
+	`, userID, otherUserID).Scan(&status)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false
+		}
+		return nil, false
+	}
+
+	isFriend := status == "accepted" || status == "pending"
+	return &status, isFriend
 }
 
 func (p *PostgresAuthenticator) generateToken(userID string) (string, error) {

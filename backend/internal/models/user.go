@@ -20,6 +20,12 @@ type Profile struct {
 	Bio         *string `json:"bio"`
 }
 
+type ProfileWithStatus struct {
+	Profile
+	IsFriend     bool    `json:"is_friend"`
+	FriendStatus *string `json:"friend_status,omitempty"`
+}
+
 type AuthResponse struct {
 	AccessToken string `json:"access_token"`
 	User        User   `json:"user"`
@@ -56,12 +62,13 @@ type FriendLists struct {
 }
 
 type Group struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description"`
-	CreatorID   string    `json:"creator_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	MemberCount int       `json:"member_count"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Description   *string   `json:"description"`
+	CreatorID     string    `json:"creator_id"`
+	CreatedAt     time.Time `json:"created_at"`
+	MemberCount   int       `json:"member_count"`
+	GroupImageURL *string   `json:"group_image_url,omitempty"`
 }
 
 type GroupMember struct {
@@ -75,4 +82,10 @@ type Flair struct {
 	ID      string  `json:"id"`
 	Name    string  `json:"name"`
 	GroupID *string `json:"group_id,omitempty"` // null for global flairs
+}
+
+type GroupMemberProfile struct {
+	Profile
+	IsCreator bool    `json:"is_creator"`
+	Flairs    []Flair `json:"flairs,omitempty"`
 }

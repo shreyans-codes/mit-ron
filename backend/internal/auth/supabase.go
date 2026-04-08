@@ -103,7 +103,7 @@ func (s *SupabaseAuthenticator) GetFriendLists(userID string) (*models.FriendLis
 	return nil, errors.New("method not implemented for supabase")
 }
 
-func (s *SupabaseAuthenticator) CreateGroup(name, description, creatorID string) (*models.Group, error) {
+func (s *SupabaseAuthenticator) CreateGroup(name, description, creatorID, avatarURL string) (*models.Group, error) {
 	return nil, errors.New("method not implemented for supabase")
 }
 

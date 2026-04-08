@@ -6,6 +6,7 @@ class Group {
   final String creatorId;
   final DateTime createdAt;
   final int memberCount;
+  final String? groupImageUrl;
 
   Group({
     required this.id,
@@ -14,6 +15,7 @@ class Group {
     required this.creatorId,
     required this.createdAt,
     this.memberCount = 0,
+    this.groupImageUrl,
   });
 
   factory Group.fromJson(Map<String, dynamic> json) {
@@ -24,6 +26,7 @@ class Group {
       creatorId: json['creator_id'],
       createdAt: DateTime.parse(json['created_at']),
       memberCount: json['member_count'] ?? 0,
+      groupImageUrl: json['group_image_url'],
     );
   }
 
@@ -35,6 +38,7 @@ class Group {
       'creator_id': creatorId,
       'created_at': createdAt.toIso8601String(),
       'member_count': memberCount,
+      'group_image_url': groupImageUrl,
     };
   }
 }
@@ -69,25 +73,13 @@ class Flair {
   final String name;
   final String? groupId;
 
-  Flair({
-    required this.id,
-    required this.name,
-    this.groupId,
-  });
+  Flair({required this.id, required this.name, this.groupId});
 
   factory Flair.fromJson(Map<String, dynamic> json) {
-    return Flair(
-      id: json['id'],
-      name: json['name'],
-      groupId: json['group_id'],
-    );
+    return Flair(id: json['id'], name: json['name'], groupId: json['group_id']);
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'group_id': groupId,
-    };
+    return {'id': id, 'name': name, 'group_id': groupId};
   }
 }
