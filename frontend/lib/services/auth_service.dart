@@ -356,6 +356,25 @@ class AuthService {
     }
   }
 
+  Future<void> removeGroupMember(String groupId, String userId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.removeGroupMember}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_token!.trim()}',
+      },
+      body: jsonEncode({'group_id': groupId, 'user_id': userId}),
+    );
+
+    if (response.statusCode != 200) {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to remove member';
+      throw AuthException(error);
+    }
+  }
+
   Future<FriendLists> getFriendLists() async {
     if (_token == null) throw AuthException('Not authenticated');
 

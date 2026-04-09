@@ -24,4 +24,5 @@ class ApiConstants {
   static const String groupMembers = '/groups/members';
   static const String deleteGroup = '/groups/delete';
   static const String addGroupMember = '/groups/add-member';
+  static const String removeGroupMember = '/groups/remove-member';
 }

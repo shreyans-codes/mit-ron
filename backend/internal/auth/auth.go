@@ -20,6 +20,7 @@ type Authenticator interface {
 	GetMyGroups(userID string) ([]models.Group, error)
 	GetGroupMembers(groupID string) ([]models.Profile, error)
 	AddGroupMember(groupID, userID string) error
+	RemoveGroupMember(groupID, adminUserID, memberID string) error
 	DeleteGroup(groupID, userID string) error
 	GetProfile(username string) (*models.Profile, error)
 	GetProfileWithFriendshipStatus(requestingUserID, profileUsername string) (*models.ProfileWithStatus, error)

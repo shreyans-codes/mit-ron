@@ -684,6 +684,43 @@ func (p *PostgresAuthenticator) DeleteGroup(groupID, userID string) error {
 	return nil
 }
 
+func (p *PostgresAuthenticator) RemoveGroupMember(groupID, adminUserID, memberID string) error {
+	ctx := context.Background()
+
+	var creatorID string
+	err := p.pool.QueryRow(ctx, "SELECT creator_id FROM public.groups WHERE id = $1", groupID).Scan(&creatorID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("group not found")
+		}
+		return fmt.Errorf("database error checking group: %v", err)
+	}
+
+	if creatorID != adminUserID {
+		return errors.New("only the group creator can remove members")
+	}
+
+	if memberID == adminUserID {
+		return errors.New("cannot remove yourself from the group")
+	}
+
+	var memberExists bool
+	err = p.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.group_members WHERE group_id = $1 AND user_id = $2)", groupID, memberID).Scan(&memberExists)
+	if err != nil {
+		return fmt.Errorf("database error checking member: %v", err)
+	}
+	if !memberExists {
+		return errors.New("user is not a member of this group")
+	}
+
+	_, err = p.pool.Exec(ctx, "DELETE FROM public.group_members WHERE group_id = $1 AND user_id = $2", groupID, memberID)
+	if err != nil {
+		return fmt.Errorf("failed to remove member: %v", err)
+	}
+
+	return nil
+}
+
 func (p *PostgresAuthenticator) getGroupByID(groupID string) (*models.Group, error) {
 	query := `
 		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count

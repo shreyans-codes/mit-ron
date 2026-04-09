@@ -508,6 +508,48 @@ func (h *Handler) HandleAddGroupMember(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Member added successfully"})
 }
 
+func (h *Handler) HandleRemoveGroupMember(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GroupID string `json:"group_id" binding:"required"`
+		UserID  string `json:"user_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = h.auth.RemoveGroupMember(req.GroupID, userID, req.UserID)
+	if err != nil {
+		if err.Error() == "group not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if err.Error() == "only the group creator can remove members" {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		if err.Error() == "cannot remove yourself from the group" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err.Error() == "user is not a member of this group" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Member removed successfully"})
+}
+
 // Helper functions
 func (h *Handler) getUserIDFromToken(token string) (string, error) {
 	token = strings.TrimSpace(token)

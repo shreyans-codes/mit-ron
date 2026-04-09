@@ -121,6 +121,53 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
     );
   }
 
+  void _showKickMemberDialog(Profile member) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Member'),
+        content: Text(
+          'Are you sure you want to remove ${member.displayName} from "${widget.group.name}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () {
+              Navigator.of(context).pop();
+              _kickMember(member);
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _kickMember(Profile member) async {
+    try {
+      await AuthService.instance.removeGroupMember(widget.group.id, member.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${member.displayName} removed from group')),
+        );
+        _loadMembers();
+        widget.onMembersUpdated?.call();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to remove member: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -206,6 +253,8 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                         member: member,
                         isCurrentUser: isCurrentUser,
                         isCreator: isMemberCreator,
+                        isAdmin: _isCreator,
+                        onKickMember: () => _showKickMemberDialog(member),
                       );
                     },
                   ),
@@ -235,11 +284,15 @@ class _MemberTile extends StatelessWidget {
   final Profile member;
   final bool isCurrentUser;
   final bool isCreator;
+  final bool isAdmin;
+  final VoidCallback onKickMember;
 
   const _MemberTile({
     required this.member,
     required this.isCurrentUser,
     required this.isCreator,
+    required this.isAdmin,
+    required this.onKickMember,
   });
 
   @override
@@ -332,6 +385,27 @@ class _MemberTile extends StatelessWidget {
               ],
             ),
           ),
+          if (isAdmin && !isCurrentUser)
+            PopupMenuButton<String>(
+              icon: Icon(
+                Icons.more_vert,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              onSelected: (value) {
+                if (value == 'kick') {
+                  onKickMember();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'kick',
+                  child: Text(
+                    'Kick member',
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

@@ -105,6 +105,7 @@ func main() {
 		protected.GET("/groups/my", handler.HandleGetMyGroups)
 		protected.GET("/groups/members", handler.HandleGetGroupMembers)
 		protected.POST("/groups/add-member", handler.HandleAddGroupMember)
+		protected.POST("/groups/remove-member", handler.HandleRemoveGroupMember)
 		protected.POST("/groups/delete", handler.HandleDeleteGroup)
 	}
 
