@@ -22,6 +22,7 @@ class ApiConstants {
   static const String createGroup = '/groups/create';
   static const String joinGroup = '/groups/join';
   static const String myGroups = '/groups/my';
+  static const String groupDetail = '/groups/detail';
   static const String groupMembers = '/groups/members';
   static const String deleteGroup = '/groups/delete';
   static const String addGroupMember = '/groups/add-member';

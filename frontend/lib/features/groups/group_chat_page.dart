@@ -29,52 +29,22 @@ class _GroupChatPageState extends State<GroupChatPage> {
     super.initState();
     _currentGroup = widget.group;
     _memberCount = widget.group.memberCount;
-    _loadMemberCount();
+    _loadGroupDetail();
   }
 
-  Future<void> _loadMemberCount() async {
+  Future<void> _loadGroupDetail() async {
     try {
-      final cachedGroups = await AuthService.instance.getCachedGroups();
-      final cachedGroup = cachedGroups
-          .where((g) => g.id == widget.group.id)
-          .firstOrNull;
-      if (cachedGroup != null &&
-          cachedGroup.memberCount != _currentGroup.memberCount) {
-        setState(() {
-          _currentGroup = cachedGroup;
-          _memberCount = cachedGroup.memberCount;
-        });
-      }
-
-      final members = await AuthService.instance.getGroupMembers(
+      final group = await AuthService.instance.getGroupDetailWithCache(
         widget.group.id,
       );
-      final newMemberCount = members.length;
-      if (newMemberCount != _memberCount) {
-        await AuthService.instance.updateCachedGroupMemberCount(
-          widget.group.id,
-          newMemberCount,
-        );
-        final updatedCached = await AuthService.instance.getCachedGroups();
-        final updated = updatedCached
-            .where((g) => g.id == widget.group.id)
-            .firstOrNull;
-        if (mounted) {
-          setState(() {
-            _memberCount = newMemberCount;
-            if (updated != null) {
-              _currentGroup = updated;
-            }
-          });
-        }
-        widget.onMemberCountUpdated?.call(widget.group.id, newMemberCount);
-      } else {
-        if (mounted) {
-          setState(() {
-            _isLoadingMembers = false;
-          });
-        }
+      if (mounted && group.memberCount != _memberCount) {
+        setState(() {
+          _currentGroup = group;
+          _memberCount = group.memberCount;
+          _isLoadingMembers = false;
+        });
       }
+      widget.onMemberCountUpdated?.call(group.id, group.memberCount);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -102,7 +72,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
               MaterialPageRoute(
                 builder: (_) => GroupDetailsPage(
                   group: _currentGroup,
-                  onMembersUpdated: _loadMemberCount,
+                  onMembersUpdated: _loadGroupDetail,
                 ),
               ),
             );
@@ -126,7 +96,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                 MaterialPageRoute(
                   builder: (_) => GroupDetailsPage(
                     group: _currentGroup,
-                    onMembersUpdated: _loadMemberCount,
+                    onMembersUpdated: _loadGroupDetail,
                   ),
                 ),
               );

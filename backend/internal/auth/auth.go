@@ -20,6 +20,7 @@ type Authenticator interface {
 	JoinGroup(groupID, userID string) error
 	GetMyGroups(userID string) ([]models.Group, error)
 	GetGroupMembers(groupID string) ([]models.Profile, error)
+	GetGroupByID(groupID string) (*models.Group, error)
 	AddGroupMember(groupID, userID string) error
 	RemoveGroupMember(groupID, adminUserID, memberID string) error
 	DeleteGroup(groupID, userID string) error

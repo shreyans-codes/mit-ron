@@ -375,6 +375,35 @@ class AuthService {
     }
   }
 
+  Future<Group> getGroupDetail(String groupId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse(
+        '${ApiConstants.baseUrl}${ApiConstants.groupDetail}?group_id=$groupId',
+      ),
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
+    );
+
+    if (response.statusCode == 200) {
+      return Group.fromJson(jsonDecode(response.body));
+    }
+    final error =
+        jsonDecode(response.body)['error'] ?? 'Failed to get group detail';
+    throw AuthException(error);
+  }
+
+  Future<void> updateCachedGroup(Group group) async {
+    final cachedGroups = await getCachedGroups();
+    final index = cachedGroups.indexWhere((g) => g.id == group.id);
+    if (index >= 0) {
+      cachedGroups[index] = group;
+    } else {
+      cachedGroups.add(group);
+    }
+    await cacheGroups(cachedGroups);
+  }
+
   Future<FriendLists> getFriendLists() async {
     if (_token == null) throw AuthException('Not authenticated');
 
@@ -480,6 +509,37 @@ class AuthService {
       _cachedGroupsKey,
       jsonEncode(cacheEntry),
     );
+  }
+
+  static const Duration _groupDetailCacheDuration = Duration(minutes: 5);
+
+  Future<Group?> getGroupFromCache(String groupId) async {
+    final cachedGroups = await getCachedGroups();
+    return cachedGroups.where((g) => g.id == groupId).firstOrNull;
+  }
+
+  Future<Group> getGroupDetailWithCache(String groupId) async {
+    final cachedGroup = await getGroupFromCache(groupId);
+    final cachedData = await CacheService.instance.getData(_cachedGroupsKey);
+
+    bool shouldRefresh = true;
+    if (cachedData != null && cachedGroup != null) {
+      try {
+        final cacheEntry = jsonDecode(cachedData);
+        final timestamp = DateTime.parse(cacheEntry['timestamp']);
+        if (DateTime.now().difference(timestamp) <= _groupDetailCacheDuration) {
+          shouldRefresh = false;
+        }
+      } catch (_) {}
+    }
+
+    if (!shouldRefresh && cachedGroup != null) {
+      return cachedGroup;
+    }
+
+    final group = await getGroupDetail(groupId);
+    await updateCachedGroup(group);
+    return group;
   }
 
   Future<void> updateCachedGroupMemberCount(

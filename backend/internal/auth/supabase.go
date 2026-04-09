@@ -115,6 +115,10 @@ func (s *SupabaseAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 	return nil, errors.New("method not implemented for supabase")
 }
 
+func (s *SupabaseAuthenticator) GetGroupByID(groupID string) (*models.Group, error) {
+	return nil, errors.New("method not implemented for supabase")
+}
+
 func (s *SupabaseAuthenticator) GetProfile(username string) (*models.Profile, error) {
 	return nil, errors.New("method not implemented for supabase")
 }

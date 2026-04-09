@@ -753,6 +753,30 @@ func (p *PostgresAuthenticator) RemoveGroupMember(groupID, adminUserID, memberID
 	return nil
 }
 
+func (p *PostgresAuthenticator) GetGroupByID(groupID string) (*models.Group, error) {
+	query := `
+		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
+		FROM public.groups g
+		LEFT JOIN public.group_members gm ON g.id = gm.group_id
+		WHERE g.id = $1
+		GROUP BY g.id, g.name, g.description, g.creator_id, g.created_at, g.group_image_url
+	`
+	row := p.pool.QueryRow(context.Background(), query, groupID)
+	var group models.Group
+	var groupImageURL string
+	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &groupImageURL, &group.MemberCount)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("group not found")
+		}
+		return nil, fmt.Errorf("database error fetching group by ID: %v", err)
+	}
+	if groupImageURL != "" {
+		group.GroupImageURL = &groupImageURL
+	}
+	return &group, nil
+}
+
 func (p *PostgresAuthenticator) getGroupByID(groupID string) (*models.Group, error) {
 	query := `
 		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count

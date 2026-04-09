@@ -484,6 +484,34 @@ func (h *Handler) HandleGetMyGroups(c *gin.Context) {
 	c.JSON(http.StatusOK, enrichedGroups)
 }
 
+func (h *Handler) HandleGetGroupDetail(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	groupID := c.Query("group_id")
+	if groupID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id is required"})
+		return
+	}
+
+	group, err := h.auth.GetGroupByID(groupID)
+	if err != nil {
+		if err.Error() == "group not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get group: %v", err)})
+		return
+	}
+
+	enrichedGroup := h.enrichGroupWithSignedURLs(*group)
+	c.JSON(http.StatusOK, enrichedGroup)
+}
+
 func (h *Handler) enrichGroupWithSignedURLs(group models.Group) models.Group {
 	if group.GroupImageURL != nil && *group.GroupImageURL != "" {
 		urlResult, err := h.storage.GetSignedURLFromPath(*group.GroupImageURL, 3600)
