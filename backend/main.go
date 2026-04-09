@@ -26,6 +26,7 @@ func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	supabaseAnonKey := os.Getenv("SUPABASE_ANON_KEY")
+	supabaseServiceKey := os.Getenv("SUPABASE_SERVICE_ROLE_KEY")
 	jwtSecret := os.Getenv("JWT_SECRET")
 
 	if dbURL == "" || jwtSecret == "" {
@@ -58,7 +59,7 @@ func main() {
 		log.Fatalf("Failed to initialize authenticator: %v", err)
 	}
 
-	storageProvider := storage.NewSupabaseStorage(supabaseURL, supabaseAnonKey)
+	storageProvider := storage.NewSupabaseStorage(supabaseURL, supabaseAnonKey, supabaseServiceKey)
 	handler := api.NewHandler(authenticator, storageProvider)
 
 	r := gin.Default()
