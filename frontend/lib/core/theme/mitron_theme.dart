@@ -8,7 +8,6 @@ abstract final class MitronTheme {
     return switch (variant) {
       AppThemeVariant.darkAcademia => _darkAcademia(),
       AppThemeVariant.parchmentLight => _parchmentLight(),
-      AppThemeVariant.candlelitHall => _candlelitHall(),
     };
   }
 
@@ -91,46 +90,6 @@ abstract final class MitronTheme {
     return _base(scheme, mitron, scaffold: const Color(0xFFFAF8F3));
   }
 
-  /// Dark walnut, warm brass highlights, ember glow.
-  static ThemeData _candlelitHall() {
-    const cream = Color(0xFFF3E9DC);
-    const muted = Color(0xFFB9A99A);
-    const brass = Color(0xFFC9A227);
-    const walnut = Color(0xFF1E1612);
-    const panel = Color(0xFF2B221C);
-    const ember = Color(0xFF8B4A2E);
-
-    final scheme = ColorScheme.dark(
-      brightness: Brightness.dark,
-      primary: brass,
-      onPrimary: Color(0xFF1E1612),
-      secondary: ember,
-      onSecondary: Color(0xFFFFF4EC),
-      surface: panel,
-      onSurface: cream,
-      surfaceContainerHighest: Color(0xFF3A3028),
-      error: Color(0xFFFF8A7A),
-      onError: Color(0xFF1E1612),
-    );
-
-    final mitron = MitronColors(
-      authGradient: const [
-        Color(0xFF2A1810),
-        Color(0xFF3D2818),
-        Color(0xFF16100C),
-      ],
-      cardSurface: panel,
-      cardShadow: Colors.black.withValues(alpha: 0.45),
-      demoBannerBg: const Color(0xFF3D3024),
-      demoBannerFg: brass,
-      brandTitle: cream,
-      brandSubtitle: muted,
-      textMuted: muted,
-    );
-
-    return _base(scheme, mitron, scaffold: walnut);
-  }
-
   static ThemeData _base(
     ColorScheme scheme,
     MitronColors mitron, {
@@ -180,8 +139,10 @@ abstract final class MitronTheme {
         ),
         labelStyle: TextStyle(color: mitron.textMuted),
         hintStyle: TextStyle(color: mitron.textMuted.withValues(alpha: 0.85)),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -189,10 +150,7 @@ abstract final class MitronTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(

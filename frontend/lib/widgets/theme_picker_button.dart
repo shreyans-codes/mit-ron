@@ -39,9 +39,45 @@ class ThemePickerButton extends StatelessWidget {
                           ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                   ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                    child: Text(
+                      'Brown Themes',
+                      style: Theme.of(sheetContext).textTheme.labelLarge
+                          ?.copyWith(
+                            color: Theme.of(sheetContext).colorScheme.primary,
+                          ),
+                    ),
+                  ),
                   for (final v in AppThemeVariant.values)
                     ListTile(
                       title: Text(v.label),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: v.isDark
+                              ? Colors.brown.withValues(alpha: 0.2)
+                              : Colors.amber.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: v.isDark
+                                ? Colors.brown.withValues(alpha: 0.4)
+                                : Colors.amber.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          v.isDark ? 'Dark' : 'Light',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: v.isDark
+                                ? Colors.brown.shade700
+                                : Colors.amber.shade800,
+                          ),
+                        ),
+                      ),
                       leading: Icon(
                         v == controller.variant
                             ? Icons.radio_button_checked

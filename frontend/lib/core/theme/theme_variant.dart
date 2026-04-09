@@ -1,13 +1,16 @@
 enum AppThemeVariant {
   darkAcademia,
-  parchmentLight,
-  candlelitHall;
+  parchmentLight;
 
   String get label => switch (this) {
-        darkAcademia => 'Dark academia',
-        parchmentLight => 'Parchment',
-        candlelitHall => 'Candlelit hall',
-      };
+    darkAcademia => 'Dark academia',
+    parchmentLight => 'Parchment',
+  };
+
+  bool get isDark => switch (this) {
+    darkAcademia => true,
+    parchmentLight => false,
+  };
 
   static AppThemeVariant fromStorage(String? name) {
     if (name == null) return AppThemeVariant.darkAcademia;
