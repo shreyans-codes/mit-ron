@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/theme/mitron_colors.dart';
 import '../../models/auth_user.dart';
 import '../../services/auth_service.dart';
+import '../../services/cache_service.dart';
 
 class UpdateProfilePage extends StatefulWidget {
   const UpdateProfilePage({super.key});
@@ -26,15 +27,28 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
   final _picker = ImagePicker();
 
   bool _updating = false;
+  String? _avatarUrl;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_initialized) {
-      _user = AuthService.instance.currentUser!;
-      _name = TextEditingController(text: _user.displayName);
-      _bio = TextEditingController(text: _user.bio);
-      _initialized = true;
+  void initState() {
+    super.initState();
+    _user = AuthService.instance.currentUser!;
+    _name = TextEditingController(text: _user.displayName);
+    _bio = TextEditingController(text: _user.bio);
+    _avatarUrl = _user.profilePictureUrl;
+    _initialized = true;
+    _loadCachedAvatar();
+  }
+
+  Future<void> _loadCachedAvatar() async {
+    final userId = _user.id;
+    final cachedUrl = await CacheService.instance.getCachedUserAvatar(userId);
+    if (cachedUrl != null && CacheService.instance.isValidUrl(cachedUrl)) {
+      if (mounted) {
+        setState(() {
+          _avatarUrl = cachedUrl;
+        });
+      }
     }
   }
 
@@ -64,7 +78,7 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
         bio: _bio.text.trim(),
         avatar: _imageFile,
       );
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully!')),
@@ -73,9 +87,9 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _updating = false);
@@ -88,9 +102,7 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Update Profile'),
-      ),
+      appBar: AppBar(title: const Text('Update Profile')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -106,14 +118,14 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
                       CircleAvatar(
                         radius: 60,
                         backgroundColor: mc.cardSurface,
-                        backgroundImage: _imageFile != null 
-                          ? FileImage(_imageFile!) 
-                          : (_user.profilePictureUrl != null 
-                              ? NetworkImage(_user.profilePictureUrl!) as ImageProvider
-                              : null),
-                        child: (_imageFile == null && _user.profilePictureUrl == null)
-                          ? const Icon(Icons.person, size: 60)
-                          : null,
+                        backgroundImage: _imageFile != null
+                            ? FileImage(_imageFile!)
+                            : (_avatarUrl != null
+                                  ? NetworkImage(_avatarUrl!) as ImageProvider
+                                  : null),
+                        child: (_imageFile == null && _avatarUrl == null)
+                            ? const Icon(Icons.person, size: 60)
+                            : null,
                       ),
                       Positioned(
                         bottom: 0,
@@ -124,7 +136,11 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
                             color: scheme.primary,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ],

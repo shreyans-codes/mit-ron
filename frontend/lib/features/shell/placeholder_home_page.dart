@@ -22,11 +22,16 @@ class PlaceholderHomePage extends StatelessWidget {
   final AuthSession? session;
 
   Future<String?> _getCurrentUserAvatarUrl() async {
-    final username = AuthService.instance.currentUser?.username;
-    if (username == null) return null;
+    final user = AuthService.instance.currentUser;
+    if (user == null) return null;
+
+    final cachedUrl = await CacheService.instance.getCachedUserAvatar(user.id);
+    if (cachedUrl != null && CacheService.instance.isValidUrl(cachedUrl)) {
+      return cachedUrl;
+    }
 
     try {
-      final profile = await AuthService.instance.getUserProfile(username);
+      final profile = await AuthService.instance.getUserProfile(user.username);
       return profile.avatarUrl;
     } catch (e) {
       debugPrint('Error fetching profile for avatar: $e');
