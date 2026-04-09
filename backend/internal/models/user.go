@@ -3,13 +3,14 @@ package models
 import "time"
 
 type User struct {
-	ID          string    `json:"id"`
-	Email       string    `json:"email"`
-	Username    string    `json:"username"`
-	DisplayName *string   `json:"display_name"`
-	AvatarURL   *string   `json:"avatar_url"`
-	Bio         *string   `json:"bio"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                 string     `json:"id"`
+	Email              string     `json:"email"`
+	Username           string     `json:"username"`
+	DisplayName        *string    `json:"display_name"`
+	AvatarURL          *string    `json:"avatar_url"`
+	AvatarURLExpiresAt *time.Time `json:"-"`
+	Bio                *string    `json:"bio"`
+	CreatedAt          time.Time  `json:"created_at"`
 }
 
 type Profile struct {
@@ -62,13 +63,14 @@ type FriendLists struct {
 }
 
 type Group struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Description   *string   `json:"description"`
-	CreatorID     string    `json:"creator_id"`
-	CreatedAt     time.Time `json:"created_at"`
-	MemberCount   int       `json:"member_count"`
-	GroupImageURL *string   `json:"group_image_url,omitempty"`
+	ID                     string     `json:"id"`
+	Name                   string     `json:"name"`
+	Description            *string    `json:"description"`
+	CreatorID              string     `json:"creator_id"`
+	CreatedAt              time.Time  `json:"created_at"`
+	MemberCount            int        `json:"member_count"`
+	GroupImageURL          *string    `json:"group_image_url,omitempty"`
+	GroupImageURLExpiresAt *time.Time `json:"-"`
 }
 
 type GroupMember struct {

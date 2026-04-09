@@ -212,9 +212,9 @@ func (h *Handler) HandleGetProfile(c *gin.Context) {
 
 func (h *Handler) enrichProfileWithSignedURLs(profile models.ProfileWithStatus) models.ProfileWithStatus {
 	if profile.Profile.AvatarURL != nil && *profile.Profile.AvatarURL != "" {
-		signedURL, err := h.storage.GetSignedURLFromPath(*profile.Profile.AvatarURL, 3600)
-		if err == nil && signedURL != "" {
-			profile.Profile.AvatarURL = &signedURL
+		urlResult, err := h.storage.GetSignedURLFromPath(*profile.Profile.AvatarURL, 3600)
+		if err == nil && urlResult.SignedURL != "" {
+			profile.Profile.AvatarURL = &urlResult.SignedURL
 		}
 	}
 	return profile
@@ -413,9 +413,9 @@ func (h *Handler) HandleGetMyGroups(c *gin.Context) {
 
 func (h *Handler) enrichGroupWithSignedURLs(group models.Group) models.Group {
 	if group.GroupImageURL != nil && *group.GroupImageURL != "" {
-		signedURL, err := h.storage.GetSignedURLFromPath(*group.GroupImageURL, 3600)
-		if err == nil && signedURL != "" {
-			group.GroupImageURL = &signedURL
+		urlResult, err := h.storage.GetSignedURLFromPath(*group.GroupImageURL, 3600)
+		if err == nil && urlResult.SignedURL != "" {
+			group.GroupImageURL = &urlResult.SignedURL
 		}
 	}
 	return group

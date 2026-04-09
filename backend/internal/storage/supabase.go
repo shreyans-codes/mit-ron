@@ -8,14 +8,22 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
+
+type urlCache struct {
+	url       string
+	expiresAt time.Time
+}
 
 type SupabaseStorage struct {
 	url        string
 	anonKey    string
 	serviceKey string
 	httpClient *http.Client
+	urlCache   map[string]urlCache
+	cacheMutex sync.RWMutex
 }
 
 func NewSupabaseStorage(url, anonKey, serviceKey string) *SupabaseStorage {
@@ -24,6 +32,7 @@ func NewSupabaseStorage(url, anonKey, serviceKey string) *SupabaseStorage {
 		anonKey:    anonKey,
 		serviceKey: serviceKey,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
+		urlCache:   make(map[string]urlCache),
 	}
 }
 
@@ -61,13 +70,13 @@ func (s *SupabaseStorage) UploadFile(bucket, fileName string, file []byte) (stri
 	return bucket + "/" + fileName, nil
 }
 
-func (s *SupabaseStorage) GetSignedURL(bucket, fileName string, expires int) (string, error) {
+func (s *SupabaseStorage) GetSignedURL(bucket, fileName string, expires int) (SignedURLResult, error) {
 	body := fmt.Sprintf(`{"expiresIn": %d}`, expires)
 	req, err := http.NewRequest("POST",
 		fmt.Sprintf("%s/storage/v1/object/sign/%s/%s", s.url, bucket, fileName),
 		strings.NewReader(body))
 	if err != nil {
-		return "", err
+		return SignedURLResult{}, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+s.getKey())
@@ -75,35 +84,49 @@ func (s *SupabaseStorage) GetSignedURL(bucket, fileName string, expires int) (st
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return SignedURLResult{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("signed URL failed: %s", string(respBody))
+		return SignedURLResult{}, fmt.Errorf("signed URL failed: %s", string(respBody))
 	}
 
 	var result map[string]string
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return SignedURLResult{}, err
 	}
 
 	signedPath, ok := result["signedURL"]
 	if !ok || signedPath == "" {
-		return "", fmt.Errorf("no signed URL in response")
+		return SignedURLResult{}, fmt.Errorf("no signed URL in response")
 	}
 
-	return s.url + "/storage/v1" + signedPath, nil
+	return SignedURLResult{
+		SignedURL: s.url + "/storage/v1" + signedPath,
+		ExpiresAt: time.Now().Add(time.Duration(expires) * time.Second),
+	}, nil
 }
 
-func (s *SupabaseStorage) GetSignedURLFromPath(path string, expires int) (string, error) {
+func (s *SupabaseStorage) GetSignedURLFromPath(path string, expires int) (SignedURLResult, error) {
+	s.cacheMutex.RLock()
+	cached, found := s.urlCache[path]
+	s.cacheMutex.RUnlock()
+
+	if found && time.Now().Before(cached.expiresAt) {
+		return SignedURLResult{
+			SignedURL: cached.url,
+			ExpiresAt: cached.expiresAt,
+		}, nil
+	}
+
 	body := fmt.Sprintf(`{"expiresIn": %d}`, expires)
 	req, err := http.NewRequest("POST",
 		fmt.Sprintf("%s/storage/v1/object/sign/%s", s.url, path),
 		strings.NewReader(body))
 	if err != nil {
-		return "", err
+		return SignedURLResult{}, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+s.getKey())
@@ -111,26 +134,36 @@ func (s *SupabaseStorage) GetSignedURLFromPath(path string, expires int) (string
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return SignedURLResult{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("signed URL failed: %s", string(respBody))
+		return SignedURLResult{}, fmt.Errorf("signed URL failed: %s", string(respBody))
 	}
 
 	var result map[string]string
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return SignedURLResult{}, err
 	}
 
 	signedPath, ok := result["signedURL"]
 	if !ok || signedPath == "" {
-		return "", fmt.Errorf("no signed URL in response")
+		return SignedURLResult{}, fmt.Errorf("no signed URL in response")
 	}
 
-	return s.url + "/storage/v1" + signedPath, nil
+	fullURL := s.url + "/storage/v1" + signedPath
+	expiresAt := time.Now().Add(time.Duration(expires) * time.Second)
+
+	s.cacheMutex.Lock()
+	s.urlCache[path] = urlCache{url: fullURL, expiresAt: expiresAt}
+	s.cacheMutex.Unlock()
+
+	return SignedURLResult{
+		SignedURL: fullURL,
+		ExpiresAt: expiresAt,
+	}, nil
 }
 
 func (s *SupabaseStorage) detectContentType(fileName string) string {
