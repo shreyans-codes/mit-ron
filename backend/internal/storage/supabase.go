@@ -94,7 +94,7 @@ func (s *SupabaseStorage) GetSignedURL(bucket, fileName string, expires int) (st
 		return "", fmt.Errorf("no signed URL in response")
 	}
 
-	return signedPath, nil
+	return s.url + "/storage/v1" + signedPath, nil
 }
 
 func (s *SupabaseStorage) GetPublicURL(bucket, fileName string) string {
