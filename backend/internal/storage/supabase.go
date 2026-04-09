@@ -2,56 +2,119 @@ package storage
 
 import (
 	"bytes"
-
-	"github.com/supabase-community/supabase-go"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
 type SupabaseStorage struct {
-	client        *supabase.Client
-	serviceClient *supabase.Client
+	url        string
+	anonKey    string
+	serviceKey string
+	httpClient *http.Client
 }
 
 func NewSupabaseStorage(url, anonKey, serviceKey string) *SupabaseStorage {
-	client, _ := supabase.NewClient(url, anonKey, &supabase.ClientOptions{})
-
-	var serviceClient *supabase.Client
-	if serviceKey != "" && serviceKey != "your-supabase-service-role-key" {
-		serviceClient, _ = supabase.NewClient(url, serviceKey, &supabase.ClientOptions{})
-	}
-
 	return &SupabaseStorage{
-		client:        client,
-		serviceClient: serviceClient,
+		url:        url,
+		anonKey:    anonKey,
+		serviceKey: serviceKey,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-func (s *SupabaseStorage) UploadFile(bucket, fileName string, file []byte) (string, error) {
-	reader := bytes.NewReader(file)
-
-	uploadClient := s.client
-	if s.serviceClient != nil {
-		uploadClient = s.serviceClient
+func (s *SupabaseStorage) getKey() string {
+	if s.serviceKey != "" && s.serviceKey != "your-supabase-service-role-key" {
+		return s.serviceKey
 	}
+	return s.anonKey
+}
 
-	_, err := uploadClient.Storage.UploadFile(bucket, fileName, reader)
+func (s *SupabaseStorage) UploadFile(bucket, fileName string, file []byte) (string, error) {
+	contentType := s.detectContentType(fileName)
+
+	req, err := http.NewRequest("POST",
+		fmt.Sprintf("%s/storage/v1/object/%s/%s", s.url, bucket, fileName),
+		bytes.NewReader(file))
 	if err != nil {
 		return "", err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.getKey())
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("upload failed: %s", string(body))
 	}
 
 	return s.GetSignedURL(bucket, fileName, 3600)
 }
 
 func (s *SupabaseStorage) GetSignedURL(bucket, fileName string, expires int) (string, error) {
-	signedClient := s.serviceClient
-	if signedClient == nil {
-		signedClient = s.client
+	req, err := http.NewRequest("GET",
+		fmt.Sprintf("%s/storage/v1/object/sign/%s/%s", s.url, bucket, fileName),
+		nil)
+	if err != nil {
+		return "", err
 	}
 
-	resp := signedClient.Storage.GetPublicUrl(bucket, fileName)
-	return resp.SignedURL, nil
+	req.Header.Set("Authorization", "Bearer "+s.getKey())
+	q := req.URL.Query()
+	q.Add("expires", fmt.Sprintf("%d", expires))
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("signed URL failed: %s", string(body))
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	signedPath, ok := result["signedURL"]
+	if !ok || signedPath == "" {
+		return "", fmt.Errorf("no signed URL in response")
+	}
+
+	return signedPath, nil
 }
 
 func (s *SupabaseStorage) GetPublicURL(bucket, fileName string) string {
 	url, _ := s.GetSignedURL(bucket, fileName, 3600)
 	return url
+}
+
+func (s *SupabaseStorage) detectContentType(fileName string) string {
+	ext := strings.ToLower(filepath.Ext(fileName))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "application/octet-stream"
+	}
 }
