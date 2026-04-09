@@ -58,7 +58,7 @@ func (s *SupabaseStorage) UploadFile(bucket, fileName string, file []byte) (stri
 		return "", fmt.Errorf("upload failed: %s", string(body))
 	}
 
-	return s.GetSignedURL(bucket, fileName, 3600)
+	return bucket + "/" + fileName, nil
 }
 
 func (s *SupabaseStorage) GetSignedURL(bucket, fileName string, expires int) (string, error) {
@@ -97,9 +97,40 @@ func (s *SupabaseStorage) GetSignedURL(bucket, fileName string, expires int) (st
 	return s.url + "/storage/v1" + signedPath, nil
 }
 
-func (s *SupabaseStorage) GetPublicURL(bucket, fileName string) string {
-	url, _ := s.GetSignedURL(bucket, fileName, 3600)
-	return url
+func (s *SupabaseStorage) GetSignedURLFromPath(path string, expires int) (string, error) {
+	body := fmt.Sprintf(`{"expiresIn": %d}`, expires)
+	req, err := http.NewRequest("POST",
+		fmt.Sprintf("%s/storage/v1/object/sign/%s", s.url, path),
+		strings.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.getKey())
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("signed URL failed: %s", string(respBody))
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	signedPath, ok := result["signedURL"]
+	if !ok || signedPath == "" {
+		return "", fmt.Errorf("no signed URL in response")
+	}
+
+	return s.url + "/storage/v1" + signedPath, nil
 }
 
 func (s *SupabaseStorage) detectContentType(fileName string) string {

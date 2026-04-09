@@ -189,11 +189,11 @@ func (h *Handler) HandleGetProfile(c *gin.Context) {
 			}
 			return
 		}
-		profileWithStatus = models.ProfileWithStatus{
+		profileWithStatus = h.enrichProfileWithSignedURLs(models.ProfileWithStatus{
 			Profile:      *profile,
 			IsFriend:     false,
 			FriendStatus: nil,
-		}
+		})
 	} else {
 		profileWithStatus, err = h.auth.GetProfileWithFriendshipStatus(requestingUserID, username)
 		if err != nil {
@@ -204,9 +204,20 @@ func (h *Handler) HandleGetProfile(c *gin.Context) {
 			}
 			return
 		}
+		profileWithStatus = h.enrichProfileWithSignedURLs(profileWithStatus.(models.ProfileWithStatus))
 	}
 
 	c.JSON(http.StatusOK, profileWithStatus)
+}
+
+func (h *Handler) enrichProfileWithSignedURLs(profile models.ProfileWithStatus) models.ProfileWithStatus {
+	if profile.Profile.AvatarURL != nil && *profile.Profile.AvatarURL != "" {
+		signedURL, err := h.storage.GetSignedURLFromPath(*profile.Profile.AvatarURL, 3600)
+		if err == nil && signedURL != "" {
+			profile.Profile.AvatarURL = &signedURL
+		}
+	}
+	return profile
 }
 
 func (h *Handler) HandleAddFriend(c *gin.Context) {
@@ -349,7 +360,8 @@ func (h *Handler) HandleCreateGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, group)
+	enrichedGroup := h.enrichGroupWithSignedURLs(*group)
+	c.JSON(http.StatusCreated, enrichedGroup)
 }
 
 func (h *Handler) HandleJoinGroup(c *gin.Context) {
@@ -391,7 +403,22 @@ func (h *Handler) HandleGetMyGroups(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, groups)
+	enrichedGroups := make([]models.Group, len(groups))
+	for i, group := range groups {
+		enrichedGroups[i] = h.enrichGroupWithSignedURLs(group)
+	}
+
+	c.JSON(http.StatusOK, enrichedGroups)
+}
+
+func (h *Handler) enrichGroupWithSignedURLs(group models.Group) models.Group {
+	if group.GroupImageURL != nil && *group.GroupImageURL != "" {
+		signedURL, err := h.storage.GetSignedURLFromPath(*group.GroupImageURL, 3600)
+		if err == nil && signedURL != "" {
+			group.GroupImageURL = &signedURL
+		}
+	}
+	return group
 }
 
 func (h *Handler) HandleGetGroupMembers(c *gin.Context) {
