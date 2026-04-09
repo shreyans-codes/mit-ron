@@ -50,6 +50,51 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
+  void _showRemoveFriendConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Friend'),
+        content: Text(
+          'Are you sure you want to remove @${_profile!.username} from your friends?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+              side: BorderSide(color: Theme.of(context).colorScheme.error),
+            ),
+            onPressed: () {
+              Navigator.of(context).pop();
+              _removeFriend();
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _removeFriend() async {
+    try {
+      await AuthService.instance.removeFriend(_profile!.username);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('@${_profile!.username} removed from friends')),
+      );
+      _fetchProfile();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isOwnProfile = AuthService.instance.currentUser?.id == _profile?.id;
@@ -175,13 +220,26 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         ),
                       ),
                     if (!isOwnProfile && _profile!.isFriend)
-                      const Chip(
-                        avatar: Icon(
-                          Icons.check_circle_outline_rounded,
-                          size: 20,
-                          color: Colors.green,
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showRemoveFriendConfirmation(),
+                          icon: Icon(
+                            Icons.person_remove_rounded,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          label: Text(
+                            'Remove Friend',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
                         ),
-                        label: Text('Friends'),
                       ),
                   ],
                 ),

@@ -13,6 +13,7 @@ type Authenticator interface {
 	GetUserByUsername(username string) (*models.User, error)
 	SearchUsers(query string) ([]models.Profile, error)
 	AddFriend(initiatorID, recipientID string) error
+	RemoveFriend(userID, friendID string) error
 	RespondToFriendRequest(recipientID, initiatorID string, accept bool) error
 	GetFriendLists(userID string) (*models.FriendLists, error)
 	CreateGroup(name, description, creatorID, avatarURL string) (*models.Group, error)

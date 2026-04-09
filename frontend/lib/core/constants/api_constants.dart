@@ -15,6 +15,7 @@ class ApiConstants {
   // Friends Endpoints
   static const String friendsList = '/friends';
   static const String addFriend = '/friends/add';
+  static const String removeFriend = '/friends/remove';
   static const String respondFriend = '/friends/respond';
 
   // Groups Endpoints

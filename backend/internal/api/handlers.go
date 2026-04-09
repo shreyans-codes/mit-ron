@@ -264,23 +264,7 @@ func (h *Handler) HandleAddFriend(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Friend request sent successfully"})
 }
 
-func (h *Handler) HandleGetFriends(c *gin.Context) {
-	token := c.GetString("token")
-	currentUserID, err := h.getUserIDFromToken(token)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
-	}
-
-	lists, err := h.auth.GetFriendLists(currentUserID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load friends: %v", err)})
-		return
-	}
-	c.JSON(http.StatusOK, lists)
-}
-
-func (h *Handler) HandleRespondFriendRequest(c *gin.Context) {
+func (h *Handler) HandleRemoveFriend(c *gin.Context) {
 	token := c.GetString("token")
 	currentUserID, err := h.getUserIDFromToken(token)
 	if err != nil {
@@ -289,28 +273,38 @@ func (h *Handler) HandleRespondFriendRequest(c *gin.Context) {
 	}
 
 	var req struct {
-		InitiatorID string `json:"initiator_id" binding:"required"`
-		Accept      bool   `json:"accept"`
+		FriendUsername string `json:"friend_username" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err = h.auth.RespondToFriendRequest(currentUserID, req.InitiatorID, req.Accept)
+	friendUser, err := h.auth.GetUserByUsername(req.FriendUsername)
 	if err != nil {
-		if errors.Is(err, auth.ErrFriendRequestNotFound) {
+		if errors.Is(err, errors.New("user not found")) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to find user: %v", err)})
+		}
+		return
+	}
+
+	err = h.auth.RemoveFriend(currentUserID, friendUser.ID)
+	if err != nil {
+		if err.Error() == "cannot remove yourself as a friend" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err.Error() == "user is not your friend" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if req.Accept {
-		c.JSON(http.StatusOK, gin.H{"message": "Friend request accepted"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Friend request declined"})
+
+	c.JSON(http.StatusOK, gin.H{"message": "Friend removed successfully"})
 }
 
 func (h *Handler) HandleCreateGroup(c *gin.Context) {

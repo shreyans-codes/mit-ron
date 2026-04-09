@@ -408,6 +408,38 @@ func (p *PostgresAuthenticator) RespondToFriendRequest(recipientID, initiatorID 
 	return nil
 }
 
+func (p *PostgresAuthenticator) RemoveFriend(userID, friendID string) error {
+	if userID == friendID {
+		return errors.New("cannot remove yourself as a friend")
+	}
+
+	ctx := context.Background()
+	var exists bool
+	err := p.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM public.friends
+			WHERE ((initiator_id = $1 AND recipient_id = $2) OR (initiator_id = $2 AND recipient_id = $1))
+			AND status = 'accepted'
+		)
+	`, userID, friendID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("database error checking friendship: %v", err)
+	}
+	if !exists {
+		return errors.New("user is not your friend")
+	}
+
+	_, err = p.pool.Exec(ctx, `
+		DELETE FROM public.friends
+		WHERE ((initiator_id = $1 AND recipient_id = $2) OR (initiator_id = $2 AND recipient_id = $1))
+		AND status = 'accepted'
+	`, userID, friendID)
+	if err != nil {
+		return fmt.Errorf("database error removing friend: %v", err)
+	}
+	return nil
+}
+
 func (p *PostgresAuthenticator) GetFriendLists(userID string) (*models.FriendLists, error) {
 	ctx := context.Background()
 	out := &models.FriendLists{

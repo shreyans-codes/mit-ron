@@ -91,9 +91,10 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+              side: BorderSide(color: Theme.of(context).colorScheme.error),
             ),
             onPressed: () {
               Navigator.of(context).pop();
@@ -134,9 +135,10 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+              side: BorderSide(color: Theme.of(context).colorScheme.error),
             ),
             onPressed: () {
               Navigator.of(context).pop();

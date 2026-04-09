@@ -392,6 +392,25 @@ class AuthService {
     throw AuthException(error is String ? error : error.toString());
   }
 
+  Future<void> removeFriend(String friendUsername) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.removeFriend}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_token!.trim()}',
+      },
+      body: jsonEncode({'friend_username': friendUsername}),
+    );
+
+    if (response.statusCode != 200) {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to remove friend';
+      throw AuthException(error);
+    }
+  }
+
   Future<void> respondToFriendRequest({
     required String initiatorId,
     required bool accept,
