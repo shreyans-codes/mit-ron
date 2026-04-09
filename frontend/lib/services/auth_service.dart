@@ -444,6 +444,28 @@ class AuthService {
     );
   }
 
+  Future<void> updateCachedGroupMemberCount(
+    String groupId,
+    int memberCount,
+  ) async {
+    final cachedGroups = await getCachedGroups();
+    final updatedGroups = cachedGroups.map((g) {
+      if (g.id == groupId) {
+        return Group(
+          id: g.id,
+          name: g.name,
+          description: g.description,
+          creatorId: g.creatorId,
+          createdAt: g.createdAt,
+          memberCount: memberCount,
+          groupImageUrl: g.groupImageUrl,
+        );
+      }
+      return g;
+    }).toList();
+    await cacheGroups(updatedGroups);
+  }
+
   Future<List<Group>> getCachedGroups() async {
     final cachedData = await CacheService.instance.getData(_cachedGroupsKey);
     if (cachedData == null) return [];

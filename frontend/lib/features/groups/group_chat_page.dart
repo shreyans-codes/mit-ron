@@ -5,7 +5,12 @@ import 'group_details_page.dart';
 
 class GroupChatPage extends StatefulWidget {
   final Group group;
-  const GroupChatPage({super.key, required this.group});
+  final Function(String groupId, int memberCount)? onMemberCountUpdated;
+  const GroupChatPage({
+    super.key,
+    required this.group,
+    this.onMemberCountUpdated,
+  });
 
   static const String routeName = '/group-chat';
 
@@ -17,28 +22,66 @@ class _GroupChatPageState extends State<GroupChatPage> {
   final TextEditingController _messageController = TextEditingController();
   int _memberCount = 0;
   bool _isLoadingMembers = true;
+  late Group _currentGroup;
 
   @override
   void initState() {
     super.initState();
+    _currentGroup = widget.group;
     _memberCount = widget.group.memberCount;
     _loadMemberCount();
   }
 
   Future<void> _loadMemberCount() async {
     try {
+      final cachedGroups = await AuthService.instance.getCachedGroups();
+      final cachedGroup = cachedGroups
+          .where((g) => g.id == widget.group.id)
+          .firstOrNull;
+      if (cachedGroup != null &&
+          cachedGroup.memberCount != _currentGroup.memberCount) {
+        setState(() {
+          _currentGroup = cachedGroup;
+          _memberCount = cachedGroup.memberCount;
+        });
+      }
+
       final members = await AuthService.instance.getGroupMembers(
         widget.group.id,
       );
-      setState(() {
-        _memberCount = members.length;
-        _isLoadingMembers = false;
-      });
+      final newMemberCount = members.length;
+      if (newMemberCount != _memberCount) {
+        await AuthService.instance.updateCachedGroupMemberCount(
+          widget.group.id,
+          newMemberCount,
+        );
+        final updatedCached = await AuthService.instance.getCachedGroups();
+        final updated = updatedCached
+            .where((g) => g.id == widget.group.id)
+            .firstOrNull;
+        if (mounted) {
+          setState(() {
+            _memberCount = newMemberCount;
+            if (updated != null) {
+              _currentGroup = updated;
+            }
+          });
+        }
+        widget.onMemberCountUpdated?.call(widget.group.id, newMemberCount);
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoadingMembers = false;
+          });
+        }
+      }
     } catch (e) {
-      setState(() {
-        _memberCount = widget.group.memberCount;
-        _isLoadingMembers = false;
-      });
+      if (mounted) {
+        setState(() {
+          _memberCount = _currentGroup.memberCount;
+          _isLoadingMembers = false;
+        });
+      }
     }
   }
 
@@ -58,7 +101,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => GroupDetailsPage(
-                  group: widget.group,
+                  group: _currentGroup,
                   onMembersUpdated: _loadMemberCount,
                 ),
               ),
@@ -67,7 +110,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.group.name),
+              Text(_currentGroup.name),
               Text(
                 _isLoadingMembers ? '... members' : '$_memberCount members',
                 style: Theme.of(context).textTheme.labelSmall,
@@ -82,7 +125,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => GroupDetailsPage(
-                    group: widget.group,
+                    group: _currentGroup,
                     onMembersUpdated: _loadMemberCount,
                   ),
                 ),

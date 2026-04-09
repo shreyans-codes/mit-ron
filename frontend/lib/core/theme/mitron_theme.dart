@@ -10,8 +10,8 @@ abstract final class MitronTheme {
       AppThemeVariant.parchmentLight => _parchmentLight(),
       AppThemeVariant.midnightOcean => _midnightOcean(),
       AppThemeVariant.coastalBreeze => _coastalBreeze(),
-      AppThemeVariant.forestDawn => _forestDawn(),
       AppThemeVariant.twilightGrove => _twilightGrove(),
+      AppThemeVariant.forestDawn => _forestDawn(),
       AppThemeVariant.sunsetDusk => _sunsetDusk(),
       AppThemeVariant.goldenHour => _goldenHour(),
     };

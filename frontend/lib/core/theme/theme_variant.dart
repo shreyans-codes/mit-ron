@@ -3,8 +3,8 @@ enum AppThemeVariant {
   parchmentLight,
   midnightOcean,
   coastalBreeze,
-  forestDawn,
   twilightGrove,
+  forestDawn,
   sunsetDusk,
   goldenHour;
 

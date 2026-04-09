@@ -94,6 +94,19 @@ class _GroupListPageState extends State<GroupListPage> {
     }
   }
 
+  Future<void> _updateGroupMemberCount(String groupId, int memberCount) async {
+    await AuthService.instance.updateCachedGroupMemberCount(
+      groupId,
+      memberCount,
+    );
+    final updatedGroups = await AuthService.instance.getCachedGroups();
+    if (mounted) {
+      setState(() {
+        _groups = updatedGroups;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -189,7 +202,10 @@ class _GroupListPageState extends State<GroupListPage> {
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (context) => GroupChatPage(group: group),
+                            builder: (context) => GroupChatPage(
+                              group: group,
+                              onMemberCountUpdated: _updateGroupMemberCount,
+                            ),
                           ),
                         );
                       },
