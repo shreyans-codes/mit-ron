@@ -264,6 +264,9 @@ class _MemberTile extends StatelessWidget {
             builder: (context, snapshot) {
               final avatarUrl = snapshot.data ?? member.avatarUrl;
               final isValid = CacheService.instance.isValidUrl(avatarUrl);
+              debugPrint(
+                'GroupMember ${member.id} - Cache key: cached_user_avatar_${member.id}, Value: $avatarUrl, Valid: $isValid',
+              );
               return CircleAvatar(
                 radius: 24,
                 backgroundColor: theme.colorScheme.primary,

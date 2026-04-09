@@ -505,7 +505,10 @@ class AuthService {
     final avatarUrl = json['avatar_url'] as String?;
     final userId = json['id'] as String?;
     if (userId != null && avatarUrl != null && avatarUrl.isNotEmpty) {
-      CacheService.instance.cacheUserAvatar(userId, avatarUrl);
+      // Only cache if it's a valid URL (has http/https), not raw path
+      if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
+        CacheService.instance.cacheUserAvatar(userId, avatarUrl);
+      }
     }
     return Profile(
       id: userId ?? '',

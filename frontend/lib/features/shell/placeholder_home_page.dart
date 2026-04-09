@@ -21,6 +21,19 @@ class PlaceholderHomePage extends StatelessWidget {
 
   final AuthSession? session;
 
+  Future<String?> _getCurrentUserAvatarUrl() async {
+    final username = AuthService.instance.currentUser?.username;
+    if (username == null) return null;
+
+    try {
+      final profile = await AuthService.instance.getUserProfile(username);
+      return profile.avatarUrl;
+    } catch (e) {
+      debugPrint('Error fetching profile for avatar: $e');
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final mc = MitronColors.of(context);
@@ -63,12 +76,12 @@ class PlaceholderHomePage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   FutureBuilder<String?>(
-                    future: CacheService.instance.getCachedCurrentUserAvatar(),
+                    future: _getCurrentUserAvatarUrl(),
                     builder: (context, snapshot) {
-                      final avatarUrl = snapshot.data ?? user.profilePictureUrl;
-                      final cacheService = CacheService.instance;
+                      final avatarUrl = snapshot.data;
+                      debugPrint('Sidebar - Avatar URL: $avatarUrl');
                       if (avatarUrl != null &&
-                          cacheService.isValidUrl(avatarUrl)) {
+                          CacheService.instance.isValidUrl(avatarUrl)) {
                         return CircleAvatar(
                           backgroundImage: NetworkImage(avatarUrl),
                           radius: 30,

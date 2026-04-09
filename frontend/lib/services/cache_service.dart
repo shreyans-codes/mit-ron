@@ -15,6 +15,25 @@ class CacheService {
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+
+    // Clear old invalid avatar URLs that don't have proper URLs
+    final oldData = _prefs?.getString(_userAvatarKey);
+    if (oldData != null) {
+      try {
+        final decoded = jsonDecode(oldData);
+        final url = decoded['url'] as String?;
+        if (url != null && !url.startsWith('http')) {
+          await _prefs?.remove(_userAvatarKey);
+          developer.log('Cleared invalid cached avatar URL: $url');
+        }
+      } catch (e) {
+        // If not JSON, check if it's a raw path
+        if (!oldData.startsWith('http')) {
+          await _prefs?.remove(_userAvatarKey);
+        }
+      }
+    }
+
     developer.log('CacheService initialized.');
   }
 
@@ -48,6 +67,7 @@ class CacheService {
   }
 
   Future<void> cacheUserAvatar(String userId, String avatarUrl) async {
+    developer.log('Caching avatar for user $userId: $avatarUrl');
     final data = jsonEncode({
       'url': avatarUrl,
       'cachedAt': DateTime.now().toIso8601String(),
@@ -57,11 +77,16 @@ class CacheService {
   }
 
   Future<String?> getCachedUserAvatar(String userId) async {
+    developer.log(
+      'Getting cached avatar for user: $userId, key: $_userAvatarPrefix$userId',
+    );
     final data = await getData('$_userAvatarPrefix$userId');
+    developer.log('Got cached avatar data for $userId: $data');
     if (data == null) return null;
 
     try {
       final decoded = jsonDecode(data);
+      developer.log('Decoded avatar URL for $userId: ${decoded['url']}');
       return decoded['url'] as String?;
     } catch (e) {
       return null;
@@ -90,16 +115,26 @@ class CacheService {
   }
 
   Future<void> cacheCurrentUserAvatar(String avatarUrl) async {
+    developer.log('Caching current user avatar: $avatarUrl');
     await saveData(_userAvatarKey, avatarUrl);
     developer.log('Cached current user avatar');
   }
 
   Future<String?> getCachedCurrentUserAvatar() async {
-    return getData(_userAvatarKey);
+    developer.log('Getting cached current user avatar, key: $_userAvatarKey');
+    final data = await getData(_userAvatarKey);
+    developer.log('Got cached current user avatar: $data');
+    return data;
   }
 
   bool isValidUrl(String? url) {
-    if (url == null || url.isEmpty) return false;
-    return url.startsWith('http://') || url.startsWith('https://');
+    developer.log('Validating URL: $url');
+    if (url == null || url.isEmpty) {
+      developer.log('URL is null or empty');
+      return false;
+    }
+    final isValid = url.startsWith('http://') || url.startsWith('https://');
+    developer.log('URL validation result: $isValid');
+    return isValid;
   }
 }

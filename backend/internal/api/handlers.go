@@ -178,7 +178,7 @@ func (h *Handler) HandleGetProfile(c *gin.Context) {
 	targetUser, err := h.auth.GetUserByUsername(username)
 	isOwner := err == nil && targetUser.ID == requestingUserID
 
-	var profileWithStatus interface{}
+	var profileWithStatus *models.ProfileWithStatus
 	if isOwner {
 		profile, err := h.auth.GetProfile(username)
 		if err != nil {
@@ -189,12 +189,15 @@ func (h *Handler) HandleGetProfile(c *gin.Context) {
 			}
 			return
 		}
-		profileWithStatus = h.enrichProfileWithSignedURLs(models.ProfileWithStatus{
+		profileWithStatus = &models.ProfileWithStatus{
 			Profile:      *profile,
 			IsFriend:     false,
 			FriendStatus: nil,
-		})
+		}
+		enriched := h.enrichProfileWithSignedURLs(*profileWithStatus)
+		profileWithStatus = &enriched
 	} else {
+		var err error
 		profileWithStatus, err = h.auth.GetProfileWithFriendshipStatus(requestingUserID, username)
 		if err != nil {
 			if errors.Is(err, errors.New("user profile not found")) {
@@ -204,7 +207,8 @@ func (h *Handler) HandleGetProfile(c *gin.Context) {
 			}
 			return
 		}
-		profileWithStatus = h.enrichProfileWithSignedURLs(profileWithStatus.(models.ProfileWithStatus))
+		enriched := h.enrichProfileWithSignedURLs(*profileWithStatus)
+		profileWithStatus = &enriched
 	}
 
 	c.JSON(http.StatusOK, profileWithStatus)
