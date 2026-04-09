@@ -847,7 +847,7 @@ func (p *PostgresAuthenticator) checkFriendshipStatus(userID, otherUserID string
 		return nil, false, false
 	}
 
-	isFriend := status == "accepted" || status == "pending"
+	isFriend := status == "accepted"
 	isIncoming := status == "pending" && recipientID == userID
 	return &status, isFriend, isIncoming
 }

@@ -200,17 +200,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       ),
                     ],
                     const SizedBox(height: 40),
-                    // Friend action buttons
-                    if (!isOwnProfile && !_profile!.isFriend)
-                      _buildAddFriendButton(),
-                    if (!isOwnProfile &&
-                        _profile!.isFriend &&
-                        _profile!.friendStatus != 'pending')
-                      _buildRemoveFriendButton(),
-                    if (!isOwnProfile &&
-                        _profile!.friendStatus == 'pending' &&
-                        _profile!.isIncoming)
-                      _buildAcceptDeclineButtons(),
+                    if (!isOwnProfile) _buildFriendButton(),
                   ],
                 ),
               ),
@@ -219,35 +209,52 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Widget _buildAddFriendButton() {
-    final isPending = _profile!.friendStatus == 'pending';
     return SizedBox(
       width: double.infinity,
       child: FilledButton.icon(
-        onPressed: isPending
-            ? null
-            : () async {
-                try {
-                  await AuthService.instance.addFriend(_profile!.username);
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Friend request sent to ${_profile!.username}',
-                      ),
-                    ),
-                  );
-                  _fetchProfile();
-                } catch (e) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: ${e.toString()}')),
-                  );
-                }
-              },
-        icon: Icon(
-          isPending ? Icons.access_time_rounded : Icons.person_add_rounded,
-        ),
-        label: Text(isPending ? 'Request Pending' : 'Add Friend'),
+        onPressed: () async {
+          try {
+            await AuthService.instance.addFriend(_profile!.username);
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Friend request sent to ${_profile!.username}'),
+              ),
+            );
+            _fetchProfile();
+          } catch (e) {
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+          }
+        },
+        icon: const Icon(Icons.person_add_rounded),
+        label: const Text('Add Friend'),
+      ),
+    );
+  }
+
+  Widget _buildFriendButton() {
+    if (_profile!.friendStatus == 'pending' && _profile!.isIncoming) {
+      return _buildAcceptDeclineButtons();
+    }
+    if (_profile!.friendStatus == 'pending' && !_profile!.isIncoming) {
+      return _buildRequestPendingButton();
+    }
+    if (_profile!.isFriend && _profile!.friendStatus != 'pending') {
+      return _buildRemoveFriendButton();
+    }
+    return _buildAddFriendButton();
+  }
+
+  Widget _buildRequestPendingButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.access_time_rounded),
+        label: const Text('Request Pending'),
       ),
     );
   }
