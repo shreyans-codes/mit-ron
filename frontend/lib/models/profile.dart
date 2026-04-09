@@ -9,6 +9,7 @@ class Profile {
   final String bio;
   final bool isFriend;
   final String? friendStatus;
+  final bool isIncoming;
   final List<Flair> flairs;
   final bool isCreator;
 
@@ -20,6 +21,7 @@ class Profile {
     this.bio = '',
     this.isFriend = false,
     this.friendStatus,
+    this.isIncoming = false,
     this.flairs = const [],
     this.isCreator = false,
   });
@@ -42,6 +44,7 @@ class Profile {
       bio: json['bio'] ?? '',
       isFriend: json['is_friend'] ?? false,
       friendStatus: json['friend_status'],
+      isIncoming: json['is_incoming'] ?? false,
       flairs: flairsList,
       isCreator: isCreator,
     );

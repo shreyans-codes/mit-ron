@@ -95,6 +95,29 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
+  Future<void> _respondToFriendRequest(bool accept) async {
+    try {
+      await AuthService.instance.respondToFriendRequest(
+        initiatorId: _profile!.id,
+        accept: accept,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            accept ? 'Friend request accepted' : 'Friend request declined',
+          ),
+        ),
+      );
+      _fetchProfile();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isOwnProfile = AuthService.instance.currentUser?.id == _profile?.id;
@@ -177,74 +200,95 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       ),
                     ],
                     const SizedBox(height: 40),
-                    // Add Friend button logic
+                    // Friend action buttons
                     if (!isOwnProfile && !_profile!.isFriend)
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: _profile!.friendStatus == 'pending'
-                              ? null
-                              : () async {
-                                  try {
-                                    await AuthService.instance.addFriend(
-                                      _profile!.username,
-                                    );
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Friend request sent to ${_profile!.username}',
-                                        ),
-                                      ),
-                                    );
-                                    _fetchProfile(); // Refresh to show pending status
-                                  } catch (e) {
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Error: ${e.toString()}'),
-                                      ),
-                                    );
-                                  }
-                                },
-                          icon: Icon(
-                            _profile!.friendStatus == 'pending'
-                                ? Icons.access_time_rounded
-                                : Icons.person_add_rounded,
-                          ),
-                          label: Text(
-                            _profile!.friendStatus == 'pending'
-                                ? 'Request Pending'
-                                : 'Add Friend',
-                          ),
-                        ),
-                      ),
-                    if (!isOwnProfile && _profile!.isFriend)
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => _showRemoveFriendConfirmation(),
-                          icon: Icon(
-                            Icons.person_remove_rounded,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          label: Text(
-                            'Remove Friend',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ),
+                      _buildAddFriendButton(),
+                    if (!isOwnProfile &&
+                        _profile!.isFriend &&
+                        _profile!.friendStatus != 'pending')
+                      _buildRemoveFriendButton(),
+                    if (!isOwnProfile &&
+                        _profile!.friendStatus == 'pending' &&
+                        _profile!.isIncoming)
+                      _buildAcceptDeclineButtons(),
                   ],
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildAddFriendButton() {
+    final isPending = _profile!.friendStatus == 'pending';
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: isPending
+            ? null
+            : () async {
+                try {
+                  await AuthService.instance.addFriend(_profile!.username);
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Friend request sent to ${_profile!.username}',
+                      ),
+                    ),
+                  );
+                  _fetchProfile();
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: ${e.toString()}')),
+                  );
+                }
+              },
+        icon: Icon(
+          isPending ? Icons.access_time_rounded : Icons.person_add_rounded,
+        ),
+        label: Text(isPending ? 'Request Pending' : 'Add Friend'),
+      ),
+    );
+  }
+
+  Widget _buildRemoveFriendButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () => _showRemoveFriendConfirmation(),
+        icon: Icon(
+          Icons.person_remove_rounded,
+          color: Theme.of(context).colorScheme.error,
+        ),
+        label: Text(
+          'Remove Friend',
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: Theme.of(context).colorScheme.error),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAcceptDeclineButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => _respondToFriendRequest(false),
+            child: const Text('Decline'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton(
+            onPressed: () => _respondToFriendRequest(true),
+            child: const Text('Accept'),
+          ),
+        ),
+      ],
     );
   }
 }

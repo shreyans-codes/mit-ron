@@ -801,12 +801,13 @@ func (p *PostgresAuthenticator) GetProfileWithFriendshipStatus(requestingUserID,
 		return nil, err
 	}
 
-	friendshipStatus, isFriend := p.checkFriendshipStatus(requestingUserID, profile.ID)
+	friendshipStatus, isFriend, isIncoming := p.checkFriendshipStatus(requestingUserID, profile.ID)
 
 	return &models.ProfileWithStatus{
 		Profile:      *profile,
 		IsFriend:     isFriend,
 		FriendStatus: friendshipStatus,
+		IsIncoming:   isIncoming,
 	}, nil
 }
 
@@ -828,26 +829,27 @@ func (p *PostgresAuthenticator) GetProfileByUserID(userID string) (*models.Profi
 	return &profile, nil
 }
 
-func (p *PostgresAuthenticator) checkFriendshipStatus(userID, otherUserID string) (*string, bool) {
+func (p *PostgresAuthenticator) checkFriendshipStatus(userID, otherUserID string) (*string, bool, bool) {
 	if userID == otherUserID {
-		return nil, false
+		return nil, false, false
 	}
 
-	var status string
+	var initiatorID, recipientID, status string
 	err := p.pool.QueryRow(context.Background(), `
-		SELECT status::text FROM public.friends
+		SELECT initiator_id, recipient_id, status::text FROM public.friends
 		WHERE (initiator_id = $1 AND recipient_id = $2) OR (initiator_id = $2 AND recipient_id = $1)
-	`, userID, otherUserID).Scan(&status)
+	`, userID, otherUserID).Scan(&initiatorID, &recipientID, &status)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, false
+			return nil, false, false
 		}
-		return nil, false
+		return nil, false, false
 	}
 
 	isFriend := status == "accepted" || status == "pending"
-	return &status, isFriend
+	isIncoming := status == "pending" && recipientID == userID
+	return &status, isFriend, isIncoming
 }
 
 func (p *PostgresAuthenticator) generateToken(userID string) (string, error) {

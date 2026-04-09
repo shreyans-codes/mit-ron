@@ -25,6 +25,7 @@ type ProfileWithStatus struct {
 	Profile
 	IsFriend     bool    `json:"is_friend"`
 	FriendStatus *string `json:"friend_status,omitempty"`
+	IsIncoming   bool    `json:"is_incoming,omitempty"`
 }
 
 type AuthResponse struct {
