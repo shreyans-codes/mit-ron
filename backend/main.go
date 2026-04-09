@@ -95,8 +95,10 @@ func main() {
 		protected.GET("/profile/:username", handler.HandleGetProfile)
 
 		// Friends
+		protected.GET("/friends", handler.HandleGetFriendLists)
 		protected.POST("/friends/add", handler.HandleAddFriend)
 		protected.POST("/friends/remove", handler.HandleRemoveFriend)
+		protected.POST("/friends/respond", handler.HandleRespondToFriendRequest)
 
 		// Groups
 		protected.POST("/groups/create", handler.HandleCreateGroup)

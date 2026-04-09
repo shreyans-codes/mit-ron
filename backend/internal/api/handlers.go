@@ -224,6 +224,48 @@ func (h *Handler) enrichProfileWithSignedURLs(profile models.ProfileWithStatus) 
 	return profile
 }
 
+func (h *Handler) HandleGetFriendLists(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	friendLists, err := h.auth.GetFriendLists(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch friends: %v", err)})
+		return
+	}
+
+	for i := range friendLists.Friends {
+		if friendLists.Friends[i].AvatarURL != nil && *friendLists.Friends[i].AvatarURL != "" {
+			urlResult, _ := h.storage.GetSignedURL(*friendLists.Friends[i].AvatarURL, "avatar", 3600)
+			if urlResult.SignedURL != "" {
+				friendLists.Friends[i].AvatarURL = &urlResult.SignedURL
+			}
+		}
+	}
+	for i := range friendLists.PendingIncoming {
+		if friendLists.PendingIncoming[i].Profile.AvatarURL != nil && *friendLists.PendingIncoming[i].Profile.AvatarURL != "" {
+			urlResult, _ := h.storage.GetSignedURL(*friendLists.PendingIncoming[i].Profile.AvatarURL, "avatar", 3600)
+			if urlResult.SignedURL != "" {
+				friendLists.PendingIncoming[i].Profile.AvatarURL = &urlResult.SignedURL
+			}
+		}
+	}
+	for i := range friendLists.PendingOutgoing {
+		if friendLists.PendingOutgoing[i].Profile.AvatarURL != nil && *friendLists.PendingOutgoing[i].Profile.AvatarURL != "" {
+			urlResult, _ := h.storage.GetSignedURL(*friendLists.PendingOutgoing[i].Profile.AvatarURL, "avatar", 3600)
+			if urlResult.SignedURL != "" {
+				friendLists.PendingOutgoing[i].Profile.AvatarURL = &urlResult.SignedURL
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, friendLists)
+}
+
 func (h *Handler) HandleAddFriend(c *gin.Context) {
 	token := c.GetString("token")
 	currentUserID, err := h.getUserIDFromToken(token)
@@ -305,6 +347,39 @@ func (h *Handler) HandleRemoveFriend(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Friend removed successfully"})
+}
+
+func (h *Handler) HandleRespondToFriendRequest(c *gin.Context) {
+	token := c.GetString("token")
+	currentUserID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		InitiatorID string `json:"initiator_id" binding:"required"`
+		Accept      bool   `json:"accept"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = h.auth.RespondToFriendRequest(currentUserID, req.InitiatorID, req.Accept)
+	if err != nil {
+		if errors.Is(err, auth.ErrFriendRequestNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Accept {
+		c.JSON(http.StatusOK, gin.H{"message": "Friend request accepted"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Friend request declined"})
 }
 
 func (h *Handler) HandleCreateGroup(c *gin.Context) {
