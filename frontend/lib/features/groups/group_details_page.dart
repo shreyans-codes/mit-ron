@@ -3,6 +3,7 @@ import '../../models/group.dart';
 import '../../models/profile.dart';
 import '../../models/friend_lists.dart';
 import '../../services/auth_service.dart';
+import '../../services/cache_service.dart';
 import '../../models/group.dart' show Flair;
 
 class GroupDetailsPage extends StatefulWidget {
@@ -258,20 +259,25 @@ class _MemberTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: theme.colorScheme.primary,
-            backgroundImage: member.avatarUrl != null
-                ? NetworkImage(member.avatarUrl!)
-                : null,
-            child: member.avatarUrl == null
-                ? Text(
-                    member.displayName.isNotEmpty
-                        ? member.displayName[0].toUpperCase()
-                        : 'U',
-                    style: TextStyle(color: theme.colorScheme.onPrimary),
-                  )
-                : null,
+          FutureBuilder<String?>(
+            future: CacheService.instance.getCachedUserAvatar(member.id),
+            builder: (context, snapshot) {
+              final avatarUrl = snapshot.data ?? member.avatarUrl;
+              final isValid = CacheService.instance.isValidUrl(avatarUrl);
+              return CircleAvatar(
+                radius: 24,
+                backgroundColor: theme.colorScheme.primary,
+                backgroundImage: isValid ? NetworkImage(avatarUrl!) : null,
+                child: !isValid
+                    ? Text(
+                        member.displayName.isNotEmpty
+                            ? member.displayName[0].toUpperCase()
+                            : 'U',
+                        style: TextStyle(color: theme.colorScheme.onPrimary),
+                      )
+                    : null,
+              );
+            },
           ),
           const SizedBox(width: 12),
           Expanded(

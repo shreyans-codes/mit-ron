@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:mitron/models/group.dart';
 import 'package:mitron/services/auth_service.dart';
+import 'package:mitron/services/cache_service.dart';
 import 'create_group_page.dart';
 import 'join_group_page.dart';
 import 'group_chat_page.dart';
@@ -157,6 +158,29 @@ class _GroupListPageState extends State<GroupListPage> {
                       vertical: 8,
                     ),
                     child: ListTile(
+                      leading: FutureBuilder<String?>(
+                        future: CacheService.instance.getCachedGroupImage(
+                          group.id,
+                        ),
+                        builder: (context, snapshot) {
+                          final imageUrl = snapshot.data ?? group.groupImageUrl;
+                          final isValid = CacheService.instance.isValidUrl(
+                            imageUrl,
+                          );
+                          if (isValid) {
+                            return CircleAvatar(
+                              backgroundImage: NetworkImage(imageUrl!),
+                            );
+                          }
+                          return CircleAvatar(
+                            child: Text(
+                              group.name.isNotEmpty
+                                  ? group.name[0].toUpperCase()
+                                  : 'G',
+                            ),
+                          );
+                        },
+                      ),
                       title: Text(group.name),
                       subtitle: Text(
                         group.description ?? 'No description provided.',

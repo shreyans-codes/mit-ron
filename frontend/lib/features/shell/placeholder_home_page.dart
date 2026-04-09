@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/mitron_colors.dart';
 import '../../models/auth_session.dart';
 import '../../services/auth_service.dart';
+import '../../services/cache_service.dart';
 import '../../widgets/app_version_footer.dart';
 import '../../widgets/auth_token_footer.dart';
 import '../auth/login_page.dart';
@@ -61,31 +62,38 @@ class PlaceholderHomePage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (user.profilePictureUrl != null)
-                    CircleAvatar(
-                      backgroundImage: NetworkImage(user.profilePictureUrl!),
-                      radius: 30,
-                    )
-                  else
-                    const CircleAvatar(
-                      radius: 30,
-                      child: Icon(Icons.person, size: 40),
-                    ),
+                  FutureBuilder<String?>(
+                    future: CacheService.instance.getCachedCurrentUserAvatar(),
+                    builder: (context, snapshot) {
+                      final avatarUrl = snapshot.data ?? user.profilePictureUrl;
+                      final cacheService = CacheService.instance;
+                      if (avatarUrl != null &&
+                          cacheService.isValidUrl(avatarUrl)) {
+                        return CircleAvatar(
+                          backgroundImage: NetworkImage(avatarUrl),
+                          radius: 30,
+                        );
+                      }
+                      return const CircleAvatar(
+                        radius: 30,
+                        child: Icon(Icons.person, size: 40),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     user.displayName.isEmpty ? user.username : user.displayName,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.onPrimary,
-                        ),
+                      color: Theme.of(context).colorScheme.onPrimary,
+                    ),
                   ),
                   Text(
                     user.email,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onPrimary
-                              .withValues(alpha: 0.85),
-                        ),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onPrimary.withValues(alpha: 0.85),
+                    ),
                   ),
                 ],
               ),
@@ -166,24 +174,24 @@ class PlaceholderHomePage extends StatelessWidget {
                   Text(
                     'Hi, ${user.displayName.isEmpty ? user.username : user.displayName}',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     user.email,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: mc.textMuted,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyLarge?.copyWith(color: mc.textMuted),
                   ),
                   const SizedBox(height: 24),
                   Text(
                     'Use the menu to search users, friends, groups, and settings. '
                     'Your session token for debugging is pinned at the bottom.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          height: 1.5,
-                          color: mc.brandSubtitle,
-                        ),
+                      height: 1.5,
+                      color: mc.brandSubtitle,
+                    ),
                   ),
                 ],
               ),
@@ -194,12 +202,9 @@ class PlaceholderHomePage extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 12, 8, 4),
             child: const AuthTokenFooter(),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
-            child: SizedBox(
-              width: double.infinity,
-              child: AppVersionFooter(),
-            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: SizedBox(width: double.infinity, child: AppVersionFooter()),
           ),
         ],
       ),

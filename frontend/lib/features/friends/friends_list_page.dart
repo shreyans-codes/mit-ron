@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mitron/models/friend_lists.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
+import 'package:mitron/services/cache_service.dart';
 import '../users/search/user_search_page.dart';
 import '../users/profile/user_profile_page.dart';
 
@@ -56,14 +57,16 @@ class _FriendsListPageState extends State<FriendsListPage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(accept ? 'Request accepted' : 'Request declined')),
+        SnackBar(
+          content: Text(accept ? 'Request accepted' : 'Request declined'),
+        ),
       );
       await _fetchFriends();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -71,18 +74,28 @@ class _FriendsListPageState extends State<FriendsListPage> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundImage: profile.avatarUrl != null ? NetworkImage(profile.avatarUrl!) : null,
-          child: profile.avatarUrl == null ? const Icon(Icons.person) : null,
+        leading: FutureBuilder<String?>(
+          future: CacheService.instance.getCachedUserAvatar(profile.id),
+          builder: (context, snapshot) {
+            final avatarUrl = snapshot.data ?? profile.avatarUrl;
+            final isValid = CacheService.instance.isValidUrl(avatarUrl);
+            return CircleAvatar(
+              backgroundImage: isValid ? NetworkImage(avatarUrl!) : null,
+              child: !isValid ? const Icon(Icons.person) : null,
+            );
+          },
         ),
-        title: Text(profile.displayName.isEmpty ? profile.username : profile.displayName),
+        title: Text(
+          profile.displayName.isEmpty ? profile.username : profile.displayName,
+        ),
         subtitle: Text('@${profile.username}'),
-        trailing: trailing != null && trailing.isNotEmpty ? Row(mainAxisSize: MainAxisSize.min, children: trailing) : null,
+        trailing: trailing != null && trailing.isNotEmpty
+            ? Row(mainAxisSize: MainAxisSize.min, children: trailing)
+            : null,
         onTap: () {
-          Navigator.of(context).pushNamed(
-            UserProfilePage.routeName,
-            arguments: profile.username,
-          );
+          Navigator.of(
+            context,
+          ).pushNamed(UserProfilePage.routeName, arguments: profile.username);
         },
       ),
     );
@@ -105,14 +118,15 @@ class _FriendsListPageState extends State<FriendsListPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
-              ? Center(child: Text('Error: $_errorMessage'))
-              : _buildBody(),
+          ? Center(child: Text('Error: $_errorMessage'))
+          : _buildBody(),
     );
   }
 
   Widget _buildBody() {
     final lists = _lists!;
-    final hasAny = lists.friends.isNotEmpty ||
+    final hasAny =
+        lists.friends.isNotEmpty ||
         lists.pendingIncoming.isNotEmpty ||
         lists.pendingOutgoing.isNotEmpty;
 
@@ -154,8 +168,8 @@ class _FriendsListPageState extends State<FriendsListPage> {
                     child: Text(
                       'Pending',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
                     ),
                   ),
                 ],
@@ -177,8 +191,8 @@ class _FriendsListPageState extends State<FriendsListPage> {
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-            ),
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }

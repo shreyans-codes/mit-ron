@@ -475,16 +475,17 @@ class AuthService {
   }
 
   AuthUser _userFromJson(Map<String, dynamic> json) {
+    final avatarUrl = json['avatar_url'] as String?;
     return AuthUser(
       id: json['id'] as String,
       email: json['email'] as String,
       username: json['username'] as String? ?? '',
       displayName: json['display_name'] as String? ?? '',
-      profilePictureUrl: json['avatar_url'] as String?,
+      profilePictureUrl: avatarUrl,
       bio: json['bio'] as String? ?? '',
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
-          : DateTime.now(), // Fixed: createdAt handled
+          : DateTime.now(),
     );
   }
 
@@ -501,11 +502,16 @@ class AuthService {
   }
 
   Profile _profileFromJson(Map<String, dynamic> json) {
+    final avatarUrl = json['avatar_url'] as String?;
+    final userId = json['id'] as String?;
+    if (userId != null && avatarUrl != null && avatarUrl.isNotEmpty) {
+      CacheService.instance.cacheUserAvatar(userId, avatarUrl);
+    }
     return Profile(
-      id: json['id'] as String,
+      id: userId ?? '',
       username: json['username'] as String,
       displayName: json['display_name'] as String? ?? '',
-      avatarUrl: json['avatar_url'] as String?,
+      avatarUrl: avatarUrl,
       bio: json['bio'] as String? ?? '',
       isFriend: json['is_friend'] as bool? ?? false,
       friendStatus: json['friend_status'] as String?,
@@ -523,13 +529,19 @@ class AuthService {
   }
 
   Group _groupFromJson(Map<String, dynamic> json) {
+    final groupImageUrl = json['group_image_url'] as String?;
+    final groupId = json['id'] as String?;
+    if (groupId != null && groupImageUrl != null && groupImageUrl.isNotEmpty) {
+      CacheService.instance.cacheGroupImage(groupId, groupImageUrl);
+    }
     return Group(
-      id: json['id'] as String,
+      id: groupId ?? '',
       name: json['name'] as String,
       description: json['description'] as String? ?? '',
       creatorId: json['creator_id'] as String,
       createdAt: DateTime.parse(json['created_at']),
       memberCount: json['member_count'] as int? ?? 0,
+      groupImageUrl: groupImageUrl,
     );
   }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -121,11 +122,14 @@ func (s *SupabaseStorage) GetSignedURLFromPath(path string, expires int) (Signed
 		}, nil
 	}
 
+	log.Printf("Generating signed URL for path: %s", path)
+
 	body := fmt.Sprintf(`{"expiresIn": %d}`, expires)
 	req, err := http.NewRequest("POST",
 		fmt.Sprintf("%s/storage/v1/object/sign/%s", s.url, path),
 		strings.NewReader(body))
 	if err != nil {
+		log.Printf("Error creating signed URL request: %v", err)
 		return SignedURLResult{}, err
 	}
 
@@ -134,22 +138,27 @@ func (s *SupabaseStorage) GetSignedURLFromPath(path string, expires int) (Signed
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		log.Printf("Error making signed URL request: %v", err)
 		return SignedURLResult{}, err
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+	log.Printf("Signed URL response status: %d, body: %s", resp.StatusCode, string(respBody))
+
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
 		return SignedURLResult{}, fmt.Errorf("signed URL failed: %s", string(respBody))
 	}
 
 	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(respBody)).Decode(&result); err != nil {
+		log.Printf("Error decoding signed URL response: %v", err)
 		return SignedURLResult{}, err
 	}
 
 	signedPath, ok := result["signedURL"]
 	if !ok || signedPath == "" {
+		log.Printf("No signedURL in response, result: %+v", result)
 		return SignedURLResult{}, fmt.Errorf("no signed URL in response")
 	}
 
@@ -159,6 +168,8 @@ func (s *SupabaseStorage) GetSignedURLFromPath(path string, expires int) (Signed
 	s.cacheMutex.Lock()
 	s.urlCache[path] = urlCache{url: fullURL, expiresAt: expiresAt}
 	s.cacheMutex.Unlock()
+
+	log.Printf("Generated signed URL: %s", fullURL)
 
 	return SignedURLResult{
 		SignedURL: fullURL,

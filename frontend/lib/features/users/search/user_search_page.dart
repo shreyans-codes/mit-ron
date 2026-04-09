@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
+import 'package:mitron/services/cache_service.dart';
 import '../profile/user_profile_page.dart';
 
 class UserSearchPage extends StatefulWidget {
@@ -60,18 +61,25 @@ class _UserSearchPageState extends State<UserSearchPage> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundImage: profile.avatarUrl != null ? NetworkImage(profile.avatarUrl!) : null,
-          child: profile.avatarUrl == null ? const Icon(Icons.person) : null,
+        leading: FutureBuilder<String?>(
+          future: CacheService.instance.getCachedUserAvatar(profile.id),
+          builder: (context, snapshot) {
+            final avatarUrl = snapshot.data ?? profile.avatarUrl;
+            final isValid = CacheService.instance.isValidUrl(avatarUrl);
+            return CircleAvatar(
+              backgroundImage: isValid ? NetworkImage(avatarUrl!) : null,
+              child: !isValid ? const Icon(Icons.person) : null,
+            );
+          },
         ),
-        title: Text(profile.displayName.isEmpty ? profile.username : profile.displayName),
-        subtitle: Text('@${profile.username}\n${profile.bio}'), // Display username and bio
+        title: Text(
+          profile.displayName.isEmpty ? profile.username : profile.displayName,
+        ),
+        subtitle: Text('@${profile.username}\n${profile.bio}'),
         onTap: () {
-          // Navigate to user profile page
-          Navigator.of(context).pushNamed(
-            UserProfilePage.routeName,
-            arguments: profile.username, // Pass username to profile page
-          );
+          Navigator.of(
+            context,
+          ).pushNamed(UserProfilePage.routeName, arguments: profile.username);
         },
       ),
     );
@@ -80,9 +88,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Search Users'),
-      ),
+      appBar: AppBar(title: const Text('Search Users')),
       body: Column(
         children: [
           Padding(
