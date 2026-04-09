@@ -62,17 +62,16 @@ func (s *SupabaseStorage) UploadFile(bucket, fileName string, file []byte) (stri
 }
 
 func (s *SupabaseStorage) GetSignedURL(bucket, fileName string, expires int) (string, error) {
-	req, err := http.NewRequest("GET",
+	body := fmt.Sprintf(`{"expiresIn": %d}`, expires)
+	req, err := http.NewRequest("POST",
 		fmt.Sprintf("%s/storage/v1/object/sign/%s/%s", s.url, bucket, fileName),
-		nil)
+		strings.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+s.getKey())
-	q := req.URL.Query()
-	q.Add("expires", fmt.Sprintf("%d", expires))
-	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -81,8 +80,8 @@ func (s *SupabaseStorage) GetSignedURL(bucket, fileName string, expires int) (st
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("signed URL failed: %s", string(body))
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("signed URL failed: %s", string(respBody))
 	}
 
 	var result map[string]string
