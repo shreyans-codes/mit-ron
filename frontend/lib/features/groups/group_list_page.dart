@@ -42,6 +42,7 @@ class _GroupListPageState extends State<GroupListPage> {
           _groups = cachedGroups;
           _isLoading = false;
         });
+        _refreshInBackground();
         return;
       }
 
@@ -62,6 +63,19 @@ class _GroupListPageState extends State<GroupListPage> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _refreshInBackground() async {
+    try {
+      final groups = await AuthService.instance.refreshGroups();
+      if (mounted) {
+        setState(() {
+          _groups = groups;
+        });
+      }
+    } catch (e) {
+      debugPrint('Background refresh failed: $e');
     }
   }
 
@@ -92,19 +106,6 @@ class _GroupListPageState extends State<GroupListPage> {
           _isRefreshing = false;
         });
       }
-    }
-  }
-
-  Future<void> _updateGroupMemberCount(String groupId, int memberCount) async {
-    await AuthService.instance.updateCachedGroupMemberCount(
-      groupId,
-      memberCount,
-    );
-    final updatedGroups = await AuthService.instance.getCachedGroups();
-    if (mounted) {
-      setState(() {
-        _groups = updatedGroups;
-      });
     }
   }
 
@@ -200,10 +201,7 @@ class _GroupListPageState extends State<GroupListPage> {
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (context) => GroupChatPage(
-                              group: group,
-                              onMemberCountUpdated: _updateGroupMemberCount,
-                            ),
+                            builder: (context) => GroupChatPage(group: group),
                           ),
                         );
                       },

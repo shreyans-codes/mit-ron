@@ -5,12 +5,7 @@ import 'group_details_page.dart';
 
 class GroupChatPage extends StatefulWidget {
   final Group group;
-  final Function(String groupId, int memberCount)? onMemberCountUpdated;
-  const GroupChatPage({
-    super.key,
-    required this.group,
-    this.onMemberCountUpdated,
-  });
+  const GroupChatPage({super.key, required this.group});
 
   static const String routeName = '/group-chat';
 
@@ -44,7 +39,6 @@ class _GroupChatPageState extends State<GroupChatPage> {
           _isLoadingMembers = false;
         });
       }
-      widget.onMemberCountUpdated?.call(group.id, group.memberCount);
     } catch (e) {
       if (mounted) {
         setState(() {

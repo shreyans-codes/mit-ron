@@ -595,11 +595,11 @@ func (p *PostgresAuthenticator) JoinGroup(groupID, userID string) error {
 
 func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, error) {
 	query := `
-		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COUNT(gm.user_id) AS member_count
+		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, 
+			(SELECT COUNT(*) FROM public.group_members WHERE group_id = g.id) AS member_count
 		FROM public.groups g
 		JOIN public.group_members gm ON g.id = gm.group_id
 		WHERE gm.user_id = $1
-		GROUP BY g.id, g.name, g.description, g.creator_id, g.created_at
 		ORDER BY g.created_at DESC
 	`
 	rows, err := p.pool.Query(context.Background(), query, userID)
@@ -611,10 +611,12 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 	var groups = []models.Group{}
 	for rows.Next() {
 		var group models.Group
-		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &group.MemberCount); err != nil {
+		var memberCount int
+		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &memberCount); err != nil {
 			log.Printf("Error scanning group row: %v", err)
 			continue
 		}
+		group.MemberCount = memberCount
 		groups = append(groups, group)
 	}
 

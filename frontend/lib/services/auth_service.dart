@@ -270,11 +270,6 @@ class AuthService {
   Future<List<Group>> getMyGroups() async {
     if (_token == null) throw AuthException('Not authenticated');
 
-    final cachedGroups = await getCachedGroups();
-    if (cachedGroups.isNotEmpty) {
-      return cachedGroups;
-    }
-
     return refreshGroups();
   }
 
@@ -556,7 +551,9 @@ class AuthService {
     }
 
     if (!shouldRefresh && cachedGroup != null) {
-      return cachedGroup;
+      final group = await getGroupDetail(groupId);
+      await updateCachedGroup(group);
+      return group;
     }
 
     final group = await getGroupDetail(groupId);
