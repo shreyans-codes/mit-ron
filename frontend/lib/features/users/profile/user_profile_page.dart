@@ -1,4 +1,5 @@
 // frontend/lib/features/users/profile/user_profile_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
@@ -155,22 +156,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     FutureBuilder<String?>(
-                      future: CacheService.instance.getCachedUserAvatar(
+                      future: CacheService.instance.getUserAvatarLocalPath(
                         _profile!.id,
                       ),
                       builder: (context, snapshot) {
-                        final avatarUrl = snapshot.data ?? _profile!.avatarUrl;
-                        final isValid = CacheService.instance.isValidUrl(
-                          avatarUrl,
-                        );
+                        final localPath = snapshot.data;
+                        if (localPath != null && localPath.isNotEmpty) {
+                          return CircleAvatar(
+                            radius: 60,
+                            backgroundImage: FileImage(File(localPath)),
+                            child: null,
+                          );
+                        }
                         return CircleAvatar(
                           radius: 60,
-                          backgroundImage: isValid
-                              ? NetworkImage(avatarUrl!)
-                              : null,
-                          child: !isValid
-                              ? const Icon(Icons.person, size: 60)
-                              : null,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
+                          child: const Icon(Icons.person, size: 60),
                         );
                       },
                     ),

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../models/group.dart';
 import '../../models/profile.dart';
@@ -31,11 +32,12 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
   @override
   void initState() {
     super.initState();
-    _loadMembers();
+    _loadGroupData();
   }
 
-  Future<void> _loadMembers() async {
+  Future<void> _loadGroupData() async {
     try {
+      await AuthService.instance.getGroupDetailWithCache(widget.group.id);
       final members = await AuthService.instance.getGroupMembers(
         widget.group.id,
       );
@@ -49,6 +51,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
         _members = members;
         _isLoading = false;
       });
+      widget.onMembersUpdated?.call();
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -115,7 +118,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
         groupId: widget.group.id,
         currentMembers: _members,
         onMemberAdded: () {
-          _loadMembers();
+          _loadGroupData();
           widget.onMembersUpdated?.call();
         },
       ),
@@ -158,7 +161,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${member.displayName} removed from group')),
         );
-        _loadMembers();
+        _loadGroupData();
         widget.onMembersUpdated?.call();
       }
     } catch (e) {
@@ -315,25 +318,26 @@ class _MemberTile extends StatelessWidget {
       child: Row(
         children: [
           FutureBuilder<String?>(
-            future: CacheService.instance.getCachedUserAvatar(member.id),
+            future: CacheService.instance.getUserAvatarLocalPath(member.id),
             builder: (context, snapshot) {
-              final avatarUrl = snapshot.data ?? member.avatarUrl;
-              final isValid = CacheService.instance.isValidUrl(avatarUrl);
-              debugPrint(
-                'GroupMember ${member.id} - Cache key: cached_user_avatar_${member.id}, Value: $avatarUrl, Valid: $isValid',
-              );
+              final localPath = snapshot.data;
+              if (localPath != null && localPath.isNotEmpty) {
+                return CircleAvatar(
+                  radius: 24,
+                  backgroundColor: theme.colorScheme.primary,
+                  backgroundImage: FileImage(File(localPath)),
+                  child: null,
+                );
+              }
               return CircleAvatar(
                 radius: 24,
                 backgroundColor: theme.colorScheme.primary,
-                backgroundImage: isValid ? NetworkImage(avatarUrl!) : null,
-                child: !isValid
-                    ? Text(
-                        member.displayName.isNotEmpty
-                            ? member.displayName[0].toUpperCase()
-                            : 'U',
-                        style: TextStyle(color: theme.colorScheme.onPrimary),
-                      )
-                    : null,
+                child: Text(
+                  member.displayName.isNotEmpty
+                      ? member.displayName[0].toUpperCase()
+                      : 'U',
+                  style: TextStyle(color: theme.colorScheme.onPrimary),
+                ),
               );
             },
           ),

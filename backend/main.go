@@ -109,6 +109,9 @@ func main() {
 		protected.POST("/groups/add-member", handler.HandleAddGroupMember)
 		protected.POST("/groups/remove-member", handler.HandleRemoveGroupMember)
 		protected.POST("/groups/delete", handler.HandleDeleteGroup)
+
+		// Image
+		protected.POST("/generate-image", handler.HandleGenerateImage)
 	}
 
 	port := os.Getenv("PORT")

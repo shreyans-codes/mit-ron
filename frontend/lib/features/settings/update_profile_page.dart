@@ -27,7 +27,7 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
   final _picker = ImagePicker();
 
   bool _updating = false;
-  String? _avatarUrl;
+  String? _avatarPath;
 
   @override
   void initState() {
@@ -35,18 +35,20 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
     _user = AuthService.instance.currentUser!;
     _name = TextEditingController(text: _user.displayName);
     _bio = TextEditingController(text: _user.bio);
-    _avatarUrl = _user.profilePictureUrl;
+    _avatarPath = _user.profilePictureUrl;
     _initialized = true;
     _loadCachedAvatar();
   }
 
   Future<void> _loadCachedAvatar() async {
     final userId = _user.id;
-    final cachedUrl = await CacheService.instance.getCachedUserAvatar(userId);
-    if (cachedUrl != null && CacheService.instance.isValidUrl(cachedUrl)) {
+    final localPath = await CacheService.instance.getUserAvatarLocalPath(
+      userId,
+    );
+    if (localPath != null && localPath.isNotEmpty) {
       if (mounted) {
         setState(() {
-          _avatarUrl = cachedUrl;
+          _avatarPath = localPath;
         });
       }
     }
@@ -120,10 +122,10 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
                         backgroundColor: mc.cardSurface,
                         backgroundImage: _imageFile != null
                             ? FileImage(_imageFile!)
-                            : (_avatarUrl != null
-                                  ? NetworkImage(_avatarUrl!) as ImageProvider
+                            : (_avatarPath != null
+                                  ? NetworkImage(_avatarPath!) as ImageProvider
                                   : null),
-                        child: (_imageFile == null && _avatarUrl == null)
+                        child: (_imageFile == null && _avatarPath == null)
                             ? const Icon(Icons.person, size: 60)
                             : null,
                       ),

@@ -298,6 +298,28 @@ class AuthService {
     }
   }
 
+  Future<String> generateImage(String filePath) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.generateImage}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_token!.trim()}',
+      },
+      body: jsonEncode({'file_path': filePath}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['signed_url'] as String;
+    } else {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to generate image URL';
+      throw AuthException(error);
+    }
+  }
+
   Future<List<Profile>> getGroupMembers(String groupId) async {
     if (_token == null) throw AuthException('Not authenticated');
 
@@ -621,14 +643,64 @@ class AuthService {
     };
   }
 
+  Future<void> _cacheUserAvatarIfNeeded(String userId, String? filePath) async {
+    if (userId.isEmpty || filePath == null || filePath.isEmpty) return;
+
+    final shouldRefresh = await CacheService.instance.shouldRefreshUserAvatar(
+      userId,
+      filePath,
+    );
+    if (!shouldRefresh) return;
+
+    try {
+      final signedUrl = await generateImage(filePath);
+      final response = await http.get(Uri.parse(signedUrl));
+      if (response.statusCode == 200) {
+        final imageBytes = response.bodyBytes;
+        await CacheService.instance.cacheUserAvatar(
+          userId,
+          filePath,
+          imageBytes,
+        );
+      }
+    } catch (e) {
+      developer.log('Failed to cache user avatar: $e');
+    }
+  }
+
+  Future<void> _cacheGroupImageIfNeeded(
+    String groupId,
+    String? filePath,
+  ) async {
+    if (groupId.isEmpty || filePath == null || filePath.isEmpty) return;
+
+    final shouldRefresh = await CacheService.instance.shouldRefreshGroupImage(
+      groupId,
+      filePath,
+    );
+    if (!shouldRefresh) return;
+
+    try {
+      final signedUrl = await generateImage(filePath);
+      final response = await http.get(Uri.parse(signedUrl));
+      if (response.statusCode == 200) {
+        final imageBytes = response.bodyBytes;
+        await CacheService.instance.cacheGroupImage(
+          groupId,
+          filePath,
+          imageBytes,
+        );
+      }
+    } catch (e) {
+      developer.log('Failed to cache group image: $e');
+    }
+  }
+
   Profile _profileFromJson(Map<String, dynamic> json) {
     final avatarUrl = json['avatar_url'] as String?;
     final userId = json['id'] as String?;
     if (userId != null && avatarUrl != null && avatarUrl.isNotEmpty) {
-      // Only cache if it's a valid URL (has http/https), not raw path
-      if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
-        CacheService.instance.cacheUserAvatar(userId, avatarUrl);
-      }
+      _cacheUserAvatarIfNeeded(userId, avatarUrl);
     }
     return Profile(
       id: userId ?? '',
@@ -655,7 +727,7 @@ class AuthService {
     final groupImageUrl = json['group_image_url'] as String?;
     final groupId = json['id'] as String?;
     if (groupId != null && groupImageUrl != null && groupImageUrl.isNotEmpty) {
-      CacheService.instance.cacheGroupImage(groupId, groupImageUrl);
+      _cacheGroupImageIfNeeded(groupId, groupImageUrl);
     }
     return Group(
       id: groupId ?? '',

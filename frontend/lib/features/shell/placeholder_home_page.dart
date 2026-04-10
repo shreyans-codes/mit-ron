@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/mitron_colors.dart';
@@ -25,18 +26,15 @@ class PlaceholderHomePage extends StatelessWidget {
     final user = AuthService.instance.currentUser;
     if (user == null) return null;
 
-    final cachedUrl = await CacheService.instance.getCachedUserAvatar(user.id);
-    if (cachedUrl != null && CacheService.instance.isValidUrl(cachedUrl)) {
-      return cachedUrl;
+    final localPath = await CacheService.instance.getUserAvatarLocalPath(
+      user.id,
+    );
+    if (localPath != null) {
+      return localPath;
     }
 
-    try {
-      final profile = await AuthService.instance.getUserProfile(user.username);
-      return profile.avatarUrl;
-    } catch (e) {
-      debugPrint('Error fetching profile for avatar: $e');
-      return null;
-    }
+    final profile = await AuthService.instance.getUserProfile(user.username);
+    return profile.avatarUrl;
   }
 
   @override
@@ -83,12 +81,11 @@ class PlaceholderHomePage extends StatelessWidget {
                   FutureBuilder<String?>(
                     future: _getCurrentUserAvatarUrl(),
                     builder: (context, snapshot) {
-                      final avatarUrl = snapshot.data;
-                      debugPrint('Sidebar - Avatar URL: $avatarUrl');
-                      if (avatarUrl != null &&
-                          CacheService.instance.isValidUrl(avatarUrl)) {
+                      final avatarPath = snapshot.data;
+                      debugPrint('Sidebar - Avatar Path: $avatarPath');
+                      if (avatarPath != null && avatarPath.isNotEmpty) {
                         return CircleAvatar(
-                          backgroundImage: NetworkImage(avatarUrl),
+                          backgroundImage: FileImage(File(avatarPath)),
                           radius: 30,
                         );
                       }

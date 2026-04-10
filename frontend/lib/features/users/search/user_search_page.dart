@@ -1,4 +1,5 @@
 // frontend/lib/features/users/search/user_search_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
@@ -62,14 +63,16 @@ class _UserSearchPageState extends State<UserSearchPage> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ListTile(
         leading: FutureBuilder<String?>(
-          future: CacheService.instance.getCachedUserAvatar(profile.id),
+          future: CacheService.instance.getUserAvatarLocalPath(profile.id),
           builder: (context, snapshot) {
-            final avatarUrl = snapshot.data ?? profile.avatarUrl;
-            final isValid = CacheService.instance.isValidUrl(avatarUrl);
-            return CircleAvatar(
-              backgroundImage: isValid ? NetworkImage(avatarUrl!) : null,
-              child: !isValid ? const Icon(Icons.person) : null,
-            );
+            final localPath = snapshot.data;
+            if (localPath != null && localPath.isNotEmpty) {
+              return CircleAvatar(
+                backgroundImage: FileImage(File(localPath)),
+                child: null,
+              );
+            }
+            return CircleAvatar(child: const Icon(Icons.person));
           },
         ),
         title: Text(

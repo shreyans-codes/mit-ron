@@ -215,12 +215,6 @@ func (h *Handler) HandleGetProfile(c *gin.Context) {
 }
 
 func (h *Handler) enrichProfileWithSignedURLs(profile models.ProfileWithStatus) models.ProfileWithStatus {
-	if profile.Profile.AvatarURL != nil && *profile.Profile.AvatarURL != "" {
-		urlResult, err := h.storage.GetSignedURLFromPath(*profile.Profile.AvatarURL, 3600)
-		if err == nil && urlResult.SignedURL != "" {
-			profile.Profile.AvatarURL = &urlResult.SignedURL
-		}
-	}
 	return profile
 }
 
@@ -236,31 +230,6 @@ func (h *Handler) HandleGetFriendLists(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch friends: %v", err)})
 		return
-	}
-
-	for i := range friendLists.Friends {
-		if friendLists.Friends[i].AvatarURL != nil && *friendLists.Friends[i].AvatarURL != "" {
-			urlResult, _ := h.storage.GetSignedURL(*friendLists.Friends[i].AvatarURL, "avatar", 3600)
-			if urlResult.SignedURL != "" {
-				friendLists.Friends[i].AvatarURL = &urlResult.SignedURL
-			}
-		}
-	}
-	for i := range friendLists.PendingIncoming {
-		if friendLists.PendingIncoming[i].Profile.AvatarURL != nil && *friendLists.PendingIncoming[i].Profile.AvatarURL != "" {
-			urlResult, _ := h.storage.GetSignedURL(*friendLists.PendingIncoming[i].Profile.AvatarURL, "avatar", 3600)
-			if urlResult.SignedURL != "" {
-				friendLists.PendingIncoming[i].Profile.AvatarURL = &urlResult.SignedURL
-			}
-		}
-	}
-	for i := range friendLists.PendingOutgoing {
-		if friendLists.PendingOutgoing[i].Profile.AvatarURL != nil && *friendLists.PendingOutgoing[i].Profile.AvatarURL != "" {
-			urlResult, _ := h.storage.GetSignedURL(*friendLists.PendingOutgoing[i].Profile.AvatarURL, "avatar", 3600)
-			if urlResult.SignedURL != "" {
-				friendLists.PendingOutgoing[i].Profile.AvatarURL = &urlResult.SignedURL
-			}
-		}
 	}
 
 	c.JSON(http.StatusOK, friendLists)
@@ -513,12 +482,6 @@ func (h *Handler) HandleGetGroupDetail(c *gin.Context) {
 }
 
 func (h *Handler) enrichGroupWithSignedURLs(group models.Group) models.Group {
-	if group.GroupImageURL != nil && *group.GroupImageURL != "" {
-		urlResult, err := h.storage.GetSignedURLFromPath(*group.GroupImageURL, 3600)
-		if err == nil && urlResult.SignedURL != "" {
-			group.GroupImageURL = &urlResult.SignedURL
-		}
-	}
 	return group
 }
 
@@ -645,6 +608,36 @@ func (h *Handler) HandleRemoveGroupMember(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Member removed successfully"})
+}
+
+func (h *Handler) HandleGenerateImage(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		FilePath string `json:"file_path" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file_path is required"})
+		return
+	}
+
+	if req.FilePath == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file_path cannot be empty"})
+		return
+	}
+
+	urlResult, err := h.storage.GetSignedURLFromPath(req.FilePath, 3600)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate signed URL: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"signed_url": urlResult.SignedURL})
 }
 
 // Helper functions

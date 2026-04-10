@@ -1,4 +1,5 @@
 // frontend/lib/features/groups/group_list_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mitron/models/group.dart';
 import 'package:mitron/services/auth_service.dart';
@@ -172,17 +173,14 @@ class _GroupListPageState extends State<GroupListPage> {
                     ),
                     child: ListTile(
                       leading: FutureBuilder<String?>(
-                        future: CacheService.instance.getCachedGroupImage(
+                        future: CacheService.instance.getGroupImageLocalPath(
                           group.id,
                         ),
                         builder: (context, snapshot) {
-                          final imageUrl = snapshot.data ?? group.groupImageUrl;
-                          final isValid = CacheService.instance.isValidUrl(
-                            imageUrl,
-                          );
-                          if (isValid) {
+                          final localPath = snapshot.data;
+                          if (localPath != null && localPath.isNotEmpty) {
                             return CircleAvatar(
-                              backgroundImage: NetworkImage(imageUrl!),
+                              backgroundImage: FileImage(File(localPath)),
                             );
                           }
                           return CircleAvatar(
