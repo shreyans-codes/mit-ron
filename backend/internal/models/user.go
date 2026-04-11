@@ -3,13 +3,14 @@ package models
 import "time"
 
 type User struct {
-	ID          string    `json:"id"`
-	Email       string    `json:"email"`
-	Username    string    `json:"username"`
-	DisplayName *string   `json:"display_name"`
-	AvatarURL   *string   `json:"avatar_url"`
-	Bio         *string   `json:"bio"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	Username     string    `json:"username"`
+	PasswordHash string    `json:"-"`
+	DisplayName  *string   `json:"display_name,omitempty"`
+	AvatarURL    *string   `json:"avatar_url,omitempty"`
+	Bio          *string   `json:"bio,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type AuthResponse struct {

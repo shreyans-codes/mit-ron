@@ -128,6 +128,7 @@ class _GroupChatPageState extends State<GroupChatPage>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Create Event'),
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -151,33 +152,39 @@ class _GroupChatPageState extends State<GroupChatPage>
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
           ),
-          FilledButton(
-            onPressed: () async {
-              final title = titleController.text.trim();
-              if (title.isEmpty) return;
-              Navigator.pop(ctx);
-              try {
-                final event = await AuthService.instance.createEvent(
-                  groupId: widget.group.id,
-                  title: title,
-                  description: descController.text.trim(),
-                );
-                if (mounted) {
-                  setState(() => _events = [event, ..._events]);
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: FilledButton(
+              onPressed: () async {
+                final title = titleController.text.trim();
+                if (title.isEmpty) return;
+                Navigator.pop(ctx);
+                try {
+                  final event = await AuthService.instance.createEvent(
+                    groupId: widget.group.id,
+                    title: title,
+                    description: descController.text.trim(),
+                  );
+                  if (mounted) {
+                    setState(() => _events = [event, ..._events]);
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                  }
                 }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Failed: $e')));
-                }
-              }
-            },
-            child: const Text('Create'),
+              },
+              child: const Text('Create'),
+            ),
           ),
         ],
       ),
