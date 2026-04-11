@@ -14,7 +14,6 @@ import '../settings/settings_page.dart';
 import '../users/profile/user_profile_page.dart';
 import '../users/search/user_search_page.dart';
 
-/// Landing screen after auth succeeds. Replace with main app shell.
 class PlaceholderHomePage extends StatelessWidget {
   const PlaceholderHomePage({super.key, this.session});
 
@@ -82,7 +81,6 @@ class PlaceholderHomePage extends StatelessWidget {
                     future: _getCurrentUserAvatarUrl(),
                     builder: (context, snapshot) {
                       final avatarPath = snapshot.data;
-                      debugPrint('Sidebar - Avatar Path: $avatarPath');
                       if (avatarPath != null && avatarPath.isNotEmpty) {
                         return CircleAvatar(
                           backgroundImage: FileImage(File(avatarPath)),
@@ -116,47 +114,38 @@ class PlaceholderHomePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.home),
               title: const Text('Home'),
-              onTap: () {
-                Navigator.of(context).pop();
-              },
+              onTap: () => Navigator.of(context).pop(),
             ),
             ListTile(
               leading: const Icon(Icons.search),
               title: const Text('Search Users'),
-              onTap: () {
-                Navigator.of(context).pushNamed(UserSearchPage.routeName);
-              },
+              onTap: () =>
+                  Navigator.of(context).pushNamed(UserSearchPage.routeName),
             ),
             ListTile(
               leading: const Icon(Icons.people),
               title: const Text('Friends'),
-              onTap: () {
-                Navigator.of(context).pushNamed(FriendsListPage.routeName);
-              },
+              onTap: () =>
+                  Navigator.of(context).pushNamed(FriendsListPage.routeName),
             ),
             ListTile(
               leading: const Icon(Icons.group),
               title: const Text('Groups'),
-              onTap: () {
-                Navigator.of(context).pushNamed(GroupListPage.routeName);
-              },
+              onTap: () =>
+                  Navigator.of(context).pushNamed(GroupListPage.routeName),
             ),
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('My Profile'),
-              onTap: () {
-                Navigator.of(context).pushNamed(
-                  UserProfilePage.routeName,
-                  arguments: user.username,
-                );
-              },
+              onTap: () => Navigator.of(
+                context,
+              ).pushNamed(UserProfilePage.routeName, arguments: user.username),
             ),
             ListTile(
               leading: const Icon(Icons.settings_outlined),
               title: const Text('Settings'),
-              onTap: () {
-                Navigator.of(context).pushNamed(SettingsPage.routeName);
-              },
+              onTap: () =>
+                  Navigator.of(context).pushNamed(SettingsPage.routeName),
             ),
             Padding(
               padding: const EdgeInsets.all(16),
@@ -201,8 +190,7 @@ class PlaceholderHomePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Use the menu to search users, friends, groups, and settings. '
-                    'Your session token for debugging is pinned at the bottom.',
+                    'Use the menu to search users, friends, groups, and settings.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       height: 1.5,
                       color: mc.brandSubtitle,
@@ -214,12 +202,11 @@ class PlaceholderHomePage extends StatelessWidget {
           ),
           const Divider(height: 1),
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 8, 4),
-            child: const AuthTokenFooter(),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-            child: SizedBox(width: double.infinity, child: AppVersionFooter()),
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [const AuthTokenFooter(), const AppVersionFooter()],
+            ),
           ),
         ],
       ),

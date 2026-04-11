@@ -948,10 +948,12 @@ func (p *PostgresAuthenticator) CreateMessage(groupID, senderID, content string,
 
 func (p *PostgresAuthenticator) GetMessages(groupID string) ([]models.Message, error) {
 	query := `
-		SELECT id, group_id, sender_id, content, message_type, thread_id, parent_id, created_at
-		FROM public.messages
-		WHERE group_id = $1
-		ORDER BY created_at ASC
+		SELECT m.id, m.group_id, m.sender_id, m.content, m.message_type, m.thread_id, m.parent_id, m.created_at,
+			COALESCE(u.display_name, u.username) as sender_name
+		FROM public.messages m
+		JOIN public.users u ON m.sender_id = u.id
+		WHERE m.group_id = $1
+		ORDER BY m.created_at ASC
 	`
 	rows, err := p.pool.Query(context.Background(), query, groupID)
 	if err != nil {
@@ -963,12 +965,14 @@ func (p *PostgresAuthenticator) GetMessages(groupID string) ([]models.Message, e
 	for rows.Next() {
 		var msg models.Message
 		var messageType string
-		err := rows.Scan(&msg.ID, &msg.GroupID, &msg.SenderID, &msg.Content, &messageType, &msg.ThreadID, &msg.ParentID, &msg.CreatedAt)
+		var senderName string
+		err := rows.Scan(&msg.ID, &msg.GroupID, &msg.SenderID, &msg.Content, &messageType, &msg.ThreadID, &msg.ParentID, &msg.CreatedAt, &senderName)
 		if err != nil {
 			log.Printf("Error scanning message: %v", err)
 			continue
 		}
 		msg.MessageType = models.MessageType(messageType)
+		msg.SenderName = senderName
 		messages = append(messages, msg)
 	}
 

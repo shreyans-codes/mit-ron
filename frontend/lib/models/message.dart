@@ -2,6 +2,7 @@ class Message {
   final String id;
   final String groupId;
   final String senderId;
+  final String senderName;
   final String content;
   final String? threadId;
   final String? parentId;
@@ -11,6 +12,7 @@ class Message {
     required this.id,
     required this.groupId,
     required this.senderId,
+    required this.senderName,
     required this.content,
     this.threadId,
     this.parentId,
@@ -22,6 +24,7 @@ class Message {
       id: json['id'],
       groupId: json['group_id'],
       senderId: json['sender_id'],
+      senderName: json['sender_name'] ?? 'Unknown',
       content: json['content'] ?? '',
       threadId: json['thread_id'],
       parentId: json['parent_id'],

@@ -36,7 +36,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
       final group = await AuthService.instance.getGroupDetailWithCache(
         widget.group.id,
       );
-      if (mounted && group.memberCount != _memberCount) {
+      if (mounted) {
         setState(() {
           _currentGroup = group;
           _memberCount = group.memberCount;
@@ -46,7 +46,6 @@ class _GroupChatPageState extends State<GroupChatPage> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _memberCount = _currentGroup.memberCount;
           _isLoadingMembers = false;
         });
       }
@@ -151,9 +150,10 @@ class _GroupChatPageState extends State<GroupChatPage> {
                           message.senderId ==
                           AuthService.instance.currentUser?.id;
                       return _MessageBubble(
-                        sender: isMe ? 'You' : 'User',
+                        sender: isMe ? 'You' : message.senderName,
                         text: message.content,
                         isMe: isMe,
+                        timestamp: message.createdAt,
                       );
                     },
                   ),
@@ -169,12 +169,29 @@ class _MessageBubble extends StatelessWidget {
   final String sender;
   final String text;
   final bool isMe;
+  final DateTime timestamp;
 
   const _MessageBubble({
     required this.sender,
     required this.text,
     required this.isMe,
+    required this.timestamp,
   });
+
+  String _formatTime(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+
+    if (diff.inDays > 0) {
+      return '${diff.inDays}d ago';
+    } else if (diff.inHours > 0) {
+      return '${diff.inHours}h ago';
+    } else if (diff.inMinutes > 0) {
+      return '${diff.inMinutes}m ago';
+    } else {
+      return 'now';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -214,6 +231,16 @@ class _MessageBubble extends StatelessWidget {
               text,
               style: TextStyle(
                 color: isMe ? Colors.white : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
+            child: Text(
+              _formatTime(timestamp),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: Colors.grey,
+                fontSize: 10,
               ),
             ),
           ),

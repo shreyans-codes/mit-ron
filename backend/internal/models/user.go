@@ -106,6 +106,7 @@ type Message struct {
 	ID          string      `json:"id"`
 	GroupID     string      `json:"group_id"`
 	SenderID    string      `json:"sender_id"`
+	SenderName  string      `json:"sender_name"`
 	Content     string      `json:"content"`
 	MessageType MessageType `json:"message_type"`
 	ThreadID    *string     `json:"thread_id,omitempty"`
