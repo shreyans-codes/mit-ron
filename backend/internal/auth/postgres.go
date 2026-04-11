@@ -538,7 +538,7 @@ func (p *PostgresAuthenticator) CreateGroup(name, description, creatorID, avatar
 		avatarURLPtr = nil
 	}
 	err := p.pool.QueryRow(context.Background(),
-		"INSERT INTO public.groups (name, description, creator_id, group_image_url) VALUES ($1, $2, $3, $4) RETURNING id",
+		"INSERT INTO public.groups (name, description, created_by, group_image_url) VALUES ($1, $2, $3, $4) RETURNING id",
 		name, description, creatorID, avatarURLPtr).Scan(&groupID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create group: %v", err)
@@ -701,7 +701,7 @@ func (p *PostgresAuthenticator) ResolveEvent(eventID, messageID string) error {
 
 func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, error) {
 	query := `
-		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, 
+		SELECT g.id, g.name, g.description, g.created_by, g.created_at, 
 			(SELECT COUNT(*) FROM public.group_members WHERE group_id = g.id) AS member_count
 		FROM public.groups g
 		JOIN public.group_members gm ON g.id = gm.group_id
@@ -740,7 +740,7 @@ func (p *PostgresAuthenticator) GetGroupMembers(groupID string) ([]models.Profil
 		JOIN public.users u ON u.id = gm.user_id
 		WHERE gm.group_id = $1
 		ORDER BY gm.user_id = (
-			SELECT creator_id FROM public.groups WHERE id = $1
+			SELECT created_by FROM public.groups WHERE id = $1
 		) DESC, u.username ASC
 	`
 	rows, err := p.pool.Query(context.Background(), query, groupID)
@@ -799,7 +799,7 @@ func (p *PostgresAuthenticator) DeleteGroup(groupID, userID string) error {
 	ctx := context.Background()
 
 	var creatorID string
-	err := p.pool.QueryRow(ctx, "SELECT creator_id FROM public.groups WHERE id = $1", groupID).Scan(&creatorID)
+	err := p.pool.QueryRow(ctx, "SELECT created_by FROM public.groups WHERE id = $1", groupID).Scan(&creatorID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errors.New("group not found")
@@ -828,7 +828,7 @@ func (p *PostgresAuthenticator) RemoveGroupMember(groupID, adminUserID, memberID
 	ctx := context.Background()
 
 	var creatorID string
-	err := p.pool.QueryRow(ctx, "SELECT creator_id FROM public.groups WHERE id = $1", groupID).Scan(&creatorID)
+	err := p.pool.QueryRow(ctx, "SELECT created_by FROM public.groups WHERE id = $1", groupID).Scan(&creatorID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errors.New("group not found")
@@ -863,7 +863,7 @@ func (p *PostgresAuthenticator) RemoveGroupMember(groupID, adminUserID, memberID
 
 func (p *PostgresAuthenticator) GetGroupByID(groupID string) (*models.Group, error) {
 	query := `
-		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
+		SELECT g.id, g.name, g.description, g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
 		FROM public.groups g
 		LEFT JOIN public.group_members gm ON g.id = gm.group_id
 		WHERE g.id = $1
@@ -887,7 +887,7 @@ func (p *PostgresAuthenticator) GetGroupByID(groupID string) (*models.Group, err
 
 func (p *PostgresAuthenticator) getGroupByID(groupID string) (*models.Group, error) {
 	query := `
-		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
+		SELECT g.id, g.name, g.description, g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
 		FROM public.groups g
 		LEFT JOIN public.group_members gm ON g.id = gm.group_id
 		WHERE g.id = $1

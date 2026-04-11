@@ -48,7 +48,7 @@ type Group struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	Description   *string   `json:"description,omitempty"`
-	CreatorID     *string   `json:"created_by"`
+	CreatedBy     *string   `json:"created_by"`
 	CreatedAt     time.Time `json:"created_at"`
 	MemberCount   int       `json:"member_count"`
 	GroupImageURL *string   `json:"group_image_url,omitempty"`
