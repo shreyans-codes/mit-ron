@@ -916,3 +916,85 @@ func stringValue(s *string) string {
 	}
 	return *s
 }
+
+func (p *PostgresAuthenticator) CreateMessage(groupID, senderID, content string, parentID, threadID *string) (*models.Message, error) {
+	var messageID string
+	var threadIDPtr, parentIDPtr *string
+
+	threadIDVal := stringValue(threadID)
+	parentIDVal := stringValue(parentID)
+
+	if threadIDVal != "" {
+		threadIDPtr = &threadIDVal
+	}
+	if parentIDVal != "" {
+		parentIDPtr = &parentIDVal
+	}
+
+	err := p.pool.QueryRow(context.Background(),
+		`INSERT INTO public.messages (group_id, sender_id, content, parent_id, thread_id) 
+		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		groupID, senderID, content, parentIDPtr, threadIDPtr).Scan(&messageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create message: %v", err)
+	}
+
+	message, err := p.getMessageByID(messageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch created message: %v", err)
+	}
+	return message, nil
+}
+
+func (p *PostgresAuthenticator) GetMessages(groupID string) ([]models.Message, error) {
+	query := `
+		SELECT id, group_id, sender_id, content, message_type, thread_id, parent_id, created_at
+		FROM public.messages
+		WHERE group_id = $1
+		ORDER BY created_at ASC
+	`
+	rows, err := p.pool.Query(context.Background(), query, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get messages: %v", err)
+	}
+	defer rows.Close()
+
+	var messages []models.Message
+	for rows.Next() {
+		var msg models.Message
+		var messageType string
+		err := rows.Scan(&msg.ID, &msg.GroupID, &msg.SenderID, &msg.Content, &messageType, &msg.ThreadID, &msg.ParentID, &msg.CreatedAt)
+		if err != nil {
+			log.Printf("Error scanning message: %v", err)
+			continue
+		}
+		msg.MessageType = models.MessageType(messageType)
+		messages = append(messages, msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating messages: %v", err)
+	}
+
+	return messages, nil
+}
+
+func (p *PostgresAuthenticator) getMessageByID(messageID string) (*models.Message, error) {
+	query := `
+		SELECT id, group_id, sender_id, content, message_type, thread_id, parent_id, created_at
+		FROM public.messages
+		WHERE id = $1
+	`
+	row := p.pool.QueryRow(context.Background(), query, messageID)
+	var msg models.Message
+	var messageType string
+	err := row.Scan(&msg.ID, &msg.GroupID, &msg.SenderID, &msg.Content, &messageType, &msg.ThreadID, &msg.ParentID, &msg.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("message not found")
+		}
+		return nil, fmt.Errorf("failed to get message: %v", err)
+	}
+	msg.MessageType = models.MessageType(messageType)
+	return &msg, nil
+}

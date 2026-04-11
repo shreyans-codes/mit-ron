@@ -92,3 +92,23 @@ type GroupMemberProfile struct {
 	IsCreator bool    `json:"is_creator"`
 	Flairs    []Flair `json:"flairs,omitempty"`
 }
+
+type MessageType string
+
+const (
+	MessageTypeText MessageType = "text"
+	MessageTypePoll MessageType = "poll"
+	MessageTypeMap  MessageType = "map"
+	MessageTypeLink MessageType = "link"
+)
+
+type Message struct {
+	ID          string      `json:"id"`
+	GroupID     string      `json:"group_id"`
+	SenderID    string      `json:"sender_id"`
+	Content     string      `json:"content"`
+	MessageType MessageType `json:"message_type"`
+	ThreadID    *string     `json:"thread_id,omitempty"`
+	ParentID    *string     `json:"parent_id,omitempty"`
+	CreatedAt   time.Time   `json:"created_at"`
+}

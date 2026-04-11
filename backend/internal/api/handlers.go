@@ -672,3 +672,59 @@ func (h *Handler) getUserByUsername(username string) (*models.User, error) {
 func SystemTimeNow() int64 {
 	return time.Now().UnixNano()
 }
+
+func (h *Handler) HandleSendMessage(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GroupID  string  `json:"group_id" binding:"required"`
+		Content  string  `json:"content" binding:"required"`
+		ParentID *string `json:"parent_id"`
+		ThreadID *string `json:"thread_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Content == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "content is required"})
+		return
+	}
+
+	message, err := h.auth.CreateMessage(req.GroupID, userID, req.Content, req.ParentID, req.ThreadID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to send message: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusCreated, message)
+}
+
+func (h *Handler) HandleGetMessages(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	groupID := c.Query("group_id")
+	if groupID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id is required"})
+		return
+	}
+
+	messages, err := h.auth.GetMessages(groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get messages: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, messages)
+}

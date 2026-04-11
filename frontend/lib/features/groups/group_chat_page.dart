@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/group.dart';
+import '../../models/message.dart';
 import '../../services/auth_service.dart';
 import 'group_details_page.dart';
 
@@ -18,6 +19,8 @@ class _GroupChatPageState extends State<GroupChatPage> {
   int _memberCount = 0;
   bool _isLoadingMembers = true;
   late Group _currentGroup;
+  List<Message> _messages = [];
+  bool _isLoadingMessages = true;
 
   @override
   void initState() {
@@ -25,6 +28,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
     _currentGroup = widget.group;
     _memberCount = widget.group.memberCount;
     _loadGroupDetail();
+    _loadMessages();
   }
 
   Future<void> _loadGroupDetail() async {
@@ -49,11 +53,46 @@ class _GroupChatPageState extends State<GroupChatPage> {
     }
   }
 
-  void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
-    setState(() {
-      _messageController.clear();
-    });
+  Future<void> _loadMessages() async {
+    try {
+      final messages = await AuthService.instance.getMessages(widget.group.id);
+      if (mounted) {
+        setState(() {
+          _messages = messages;
+          _isLoadingMessages = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingMessages = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final content = _messageController.text.trim();
+    if (content.isEmpty) return;
+
+    try {
+      final message = await AuthService.instance.sendMessage(
+        groupId: widget.group.id,
+        content: content,
+      );
+      if (mounted) {
+        setState(() {
+          _messages = [..._messages, message];
+          _messageController.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send message: $e')));
+      }
+    }
   }
 
   @override
@@ -101,13 +140,23 @@ class _GroupChatPageState extends State<GroupChatPage> {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: 0,
-              itemBuilder: (context, index) {
-                return const SizedBox.shrink();
-              },
-            ),
+            child: _isLoadingMessages
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final message = _messages[index];
+                      final isMe =
+                          message.senderId ==
+                          AuthService.instance.currentUser?.id;
+                      return _MessageBubble(
+                        sender: isMe ? 'You' : 'User',
+                        text: message.content,
+                        isMe: isMe,
+                      );
+                    },
+                  ),
           ),
           _MessageInput(controller: _messageController, onSend: _sendMessage),
         ],

@@ -30,4 +30,8 @@ class ApiConstants {
 
   // Image Endpoints
   static const String generateImage = '/generate-image';
+
+  // Message Endpoints
+  static const String sendMessage = '/messages/send';
+  static const String getMessages = '/messages';
 }

@@ -26,4 +26,6 @@ type Authenticator interface {
 	DeleteGroup(groupID, userID string) error
 	GetProfile(username string) (*models.Profile, error)
 	GetProfileWithFriendshipStatus(requestingUserID, profileUsername string) (*models.ProfileWithStatus, error)
+	CreateMessage(groupID, senderID, content string, parentID, threadID *string) (*models.Message, error)
+	GetMessages(groupID string) ([]models.Message, error)
 }

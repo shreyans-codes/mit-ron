@@ -110,6 +110,10 @@ func main() {
 		protected.POST("/groups/remove-member", handler.HandleRemoveGroupMember)
 		protected.POST("/groups/delete", handler.HandleDeleteGroup)
 
+		// Messages
+		protected.POST("/messages/send", handler.HandleSendMessage)
+		protected.GET("/messages", handler.HandleGetMessages)
+
 		// Image
 		protected.POST("/generate-image", handler.HandleGenerateImage)
 	}

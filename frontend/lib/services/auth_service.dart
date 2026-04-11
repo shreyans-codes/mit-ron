@@ -10,6 +10,7 @@ import '../models/auth_user.dart';
 import '../models/profile.dart';
 import '../models/friend_lists.dart';
 import '../models/group.dart';
+import '../models/message.dart';
 import 'auth_exception.dart';
 import 'cache_service.dart'; // Import the new cache service
 
@@ -311,6 +312,57 @@ class AuthService {
     } else {
       final error =
           jsonDecode(response.body)['error'] ?? 'Failed to generate image URL';
+      throw AuthException(error);
+    }
+  }
+
+  Future<Message> sendMessage({
+    required String groupId,
+    required String content,
+    String? parentId,
+    String? threadId,
+  }) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.sendMessage}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_token!.trim()}',
+      },
+      body: jsonEncode({
+        'group_id': groupId,
+        'content': content,
+        if (parentId != null) 'parent_id': parentId,
+        if (threadId != null) 'thread_id': threadId,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      return Message.fromJson(jsonDecode(response.body));
+    } else {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to send message';
+      throw AuthException(error);
+    }
+  }
+
+  Future<List<Message>> getMessages(String groupId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse(
+        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?group_id=$groupId',
+      ),
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((item) => Message.fromJson(item)).toList();
+    } else {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to get messages';
       throw AuthException(error);
     }
   }
