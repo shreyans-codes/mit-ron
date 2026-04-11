@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/group.dart';
 import '../../models/message.dart';
+import '../../models/event.dart';
 import '../../services/auth_service.dart';
 import 'group_details_page.dart';
 
@@ -14,21 +15,34 @@ class GroupChatPage extends StatefulWidget {
   State<GroupChatPage> createState() => _GroupChatPageState();
 }
 
-class _GroupChatPageState extends State<GroupChatPage> {
+class _GroupChatPageState extends State<GroupChatPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   int _memberCount = 0;
   bool _isLoadingMembers = true;
   late Group _currentGroup;
   List<Message> _messages = [];
   bool _isLoadingMessages = true;
+  List<Event> _events = [];
+  bool _isLoadingEvents = true;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _currentGroup = widget.group;
     _memberCount = widget.group.memberCount;
+    _tabController = TabController(length: 2, vsync: this);
     _loadGroupDetail();
     _loadMessages();
+    _loadEvents();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _messageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadGroupDetail() async {
@@ -45,9 +59,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoadingMembers = false;
-        });
+        setState(() => _isLoadingMembers = false);
       }
     }
   }
@@ -63,9 +75,23 @@ class _GroupChatPageState extends State<GroupChatPage> {
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _isLoadingMessages = false);
+      }
+    }
+  }
+
+  Future<void> _loadEvents() async {
+    try {
+      final events = await AuthService.instance.getEvents(widget.group.id);
+      if (mounted) {
         setState(() {
-          _isLoadingMessages = false;
+          _events = events;
+          _isLoadingEvents = false;
         });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingEvents = false);
       }
     }
   }
@@ -89,7 +115,356 @@ class _GroupChatPageState extends State<GroupChatPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to send message: $e')));
+        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
+    }
+  }
+
+  void _showCreateEventDialog() {
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Create Event'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                hintText: 'Event title',
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: descController,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                hintText: 'Optional',
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final title = titleController.text.trim();
+              if (title.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                final event = await AuthService.instance.createEvent(
+                  groupId: widget.group.id,
+                  title: title,
+                  description: descController.text.trim(),
+                );
+                if (mounted) {
+                  setState(() => _events = [event, ..._events]);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                }
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => GroupDetailsPage(
+                group: _currentGroup,
+                onMembersUpdated: _loadGroupDetail,
+              ),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_currentGroup.name),
+              Text(
+                _isLoadingMembers ? '...' : '$_memberCount members',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline),
+            onPressed: _showCreateEventDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => GroupDetailsPage(
+                  group: _currentGroup,
+                  onMembersUpdated: _loadGroupDetail,
+                ),
+              ),
+            ),
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Chat'),
+            Tab(text: 'Events'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [_buildChatTab(), _buildEventsTab()],
+      ),
+    );
+  }
+
+  Widget _buildChatTab() {
+    return Column(
+      children: [
+        Expanded(
+          child: _isLoadingMessages
+              ? const Center(child: CircularProgressIndicator())
+              : _messages.isEmpty
+              ? const Center(child: Text('No messages yet'))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _messages.length,
+                  itemBuilder: (context, index) {
+                    final msg = _messages[index];
+                    final isMe =
+                        msg.senderId == AuthService.instance.currentUser?.id;
+                    return _MessageBubble(
+                      sender: isMe ? 'You' : msg.senderName ?? 'Unknown',
+                      text: msg.content,
+                      isMe: isMe,
+                      timestamp: msg.createdAt,
+                    );
+                  },
+                ),
+        ),
+        _MessageInput(controller: _messageController, onSend: _sendMessage),
+      ],
+    );
+  }
+
+  Widget _buildEventsTab() {
+    if (_isLoadingEvents)
+      return const Center(child: CircularProgressIndicator());
+    if (_events.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('No events yet'),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _showCreateEventDialog,
+              icon: const Icon(Icons.add),
+              label: const Text('Create Event'),
+            ),
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadEvents,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _events.length,
+        itemBuilder: (context, index) {
+          final event = _events[index];
+          return _EventCard(
+            event: event,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    _EventChatPage(event: event, group: _currentGroup),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _EventCard extends StatelessWidget {
+  final Event event;
+  final VoidCallback onTap;
+
+  const _EventCard({required this.event, required this.onTap});
+
+  String _formatDate(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    return 'now';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      event.title,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                  if (event.isResolved)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Resolved',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              if (event.description != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  event.description!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                _formatDate(event.createdAt),
+                style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EventChatPage extends StatefulWidget {
+  final Event event;
+  final Group group;
+
+  const _EventChatPage({required this.event, required this.group});
+
+  @override
+  State<_EventChatPage> createState() => _EventChatPageState();
+}
+
+class _EventChatPageState extends State<_EventChatPage> {
+  final TextEditingController _messageController = TextEditingController();
+  List<Message> _messages = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages();
+  }
+
+  Future<void> _loadMessages() async {
+    try {
+      final messages = await AuthService.instance.getEventMessages(
+        widget.event.id,
+      );
+      if (mounted) {
+        setState(() {
+          _messages = messages;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final content = _messageController.text.trim();
+    if (content.isEmpty) return;
+    try {
+      final message = await AuthService.instance.sendMessage(
+        groupId: widget.group.id,
+        content: content,
+        eventId: widget.event.id,
+      );
+      if (mounted) {
+        setState(() {
+          _messages = [..._messages, message];
+          _messageController.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _resolveEvent() async {
+    if (_messages.isEmpty) return;
+    final lastMsg = _messages.last;
+    try {
+      await AuthService.instance.resolveEvent(widget.event.id, lastMsg.id);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Event resolved!')));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
     }
   }
@@ -98,62 +473,32 @@ class _GroupChatPageState extends State<GroupChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: InkWell(
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => GroupDetailsPage(
-                  group: _currentGroup,
-                  onMembersUpdated: _loadGroupDetail,
-                ),
-              ),
-            );
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_currentGroup.name),
-              Text(
-                _isLoadingMembers ? '... members' : '$_memberCount members',
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ],
-          ),
-        ),
+        title: Text(widget.event.title),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline_rounded),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => GroupDetailsPage(
-                    group: _currentGroup,
-                    onMembersUpdated: _loadGroupDetail,
-                  ),
-                ),
-              );
-            },
-          ),
+          if (!widget.event.isResolved)
+            IconButton(
+              icon: const Icon(Icons.check_circle_outline),
+              onPressed: _resolveEvent,
+            ),
         ],
       ),
       body: Column(
         children: [
           Expanded(
-            child: _isLoadingMessages
+            child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
-                      final message = _messages[index];
+                      final msg = _messages[index];
                       final isMe =
-                          message.senderId ==
-                          AuthService.instance.currentUser?.id;
+                          msg.senderId == AuthService.instance.currentUser?.id;
                       return _MessageBubble(
-                        sender: isMe ? 'You' : message.senderName,
-                        text: message.content,
+                        sender: isMe ? 'You' : msg.senderName ?? 'Unknown',
+                        text: msg.content,
                         isMe: isMe,
-                        timestamp: message.createdAt,
+                        timestamp: msg.createdAt,
                       );
                     },
                   ),
@@ -179,18 +524,11 @@ class _MessageBubble extends StatelessWidget {
   });
 
   String _formatTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-
-    if (diff.inDays > 0) {
-      return '${diff.inDays}d ago';
-    } else if (diff.inHours > 0) {
-      return '${diff.inHours}h ago';
-    } else if (diff.inMinutes > 0) {
-      return '${diff.inMinutes}m ago';
-    } else {
-      return 'now';
-    }
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays > 0) return '${diff.inDays}d';
+    if (diff.inHours > 0) return '${diff.inHours}h';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m';
+    return 'now';
   }
 
   @override

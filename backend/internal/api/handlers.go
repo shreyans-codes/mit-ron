@@ -715,16 +715,99 @@ func (h *Handler) HandleGetMessages(c *gin.Context) {
 	}
 
 	groupID := c.Query("group_id")
-	if groupID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id is required"})
+	eventID := c.Query("event_id")
+
+	if groupID == "" && eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id or event_id is required"})
 		return
 	}
 
-	messages, err := h.auth.GetMessages(groupID)
+	var messages []models.Message
+	if eventID != "" {
+		messages, err = h.auth.GetEventMessages(eventID)
+	} else {
+		messages, err = h.auth.GetMessages(groupID)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get messages: %v", err)})
 		return
 	}
 
 	c.JSON(http.StatusOK, messages)
+}
+
+func (h *Handler) HandleGetEvents(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	groupID := c.Query("group_id")
+	if groupID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id is required"})
+		return
+	}
+
+	events, err := h.auth.GetEvents(groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get events: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, events)
+}
+
+func (h *Handler) HandleCreateEvent(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GroupID     string `json:"group_id" binding:"required"`
+		Title       string `json:"title" binding:"required"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	event, err := h.auth.CreateEvent(req.GroupID, req.Title, req.Description, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create event: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusCreated, event)
+}
+
+func (h *Handler) HandleResolveEvent(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		EventID   string `json:"event_id" binding:"required"`
+		MessageID string `json:"message_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = h.auth.ResolveEvent(req.EventID, req.MessageID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to resolve event: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Event resolved"})
 }

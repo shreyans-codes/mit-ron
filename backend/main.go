@@ -114,6 +114,11 @@ func main() {
 		protected.POST("/messages/send", handler.HandleSendMessage)
 		protected.GET("/messages", handler.HandleGetMessages)
 
+		// Events
+		protected.POST("/events/create", handler.HandleCreateEvent)
+		protected.GET("/events", handler.HandleGetEvents)
+		protected.POST("/events/resolve", handler.HandleResolveEvent)
+
 		// Image
 		protected.POST("/generate-image", handler.HandleGenerateImage)
 	}

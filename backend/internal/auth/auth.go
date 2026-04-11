@@ -28,4 +28,8 @@ type Authenticator interface {
 	GetProfileWithFriendshipStatus(requestingUserID, profileUsername string) (*models.ProfileWithStatus, error)
 	CreateMessage(groupID, senderID, content string, parentID, threadID *string) (*models.Message, error)
 	GetMessages(groupID string) ([]models.Message, error)
+	GetEventMessages(eventID string) ([]models.Message, error)
+	CreateEvent(groupID, title, description, creatorID string) (*models.Event, error)
+	GetEvents(groupID string) ([]models.Event, error)
+	ResolveEvent(eventID, messageID string) error
 }

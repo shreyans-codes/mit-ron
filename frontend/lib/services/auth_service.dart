@@ -11,6 +11,7 @@ import '../models/profile.dart';
 import '../models/friend_lists.dart';
 import '../models/group.dart';
 import '../models/message.dart';
+import '../models/event.dart';
 import 'auth_exception.dart';
 import 'cache_service.dart'; // Import the new cache service
 
@@ -321,6 +322,7 @@ class AuthService {
     required String content,
     String? parentId,
     String? threadId,
+    String? eventId,
   }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
@@ -335,6 +337,7 @@ class AuthService {
         'content': content,
         if (parentId != null) 'parent_id': parentId,
         if (threadId != null) 'thread_id': threadId,
+        if (eventId != null) 'event_id': eventId,
       }),
     );
 
@@ -363,6 +366,95 @@ class AuthService {
     } else {
       final error =
           jsonDecode(response.body)['error'] ?? 'Failed to get messages';
+      throw AuthException(error);
+    }
+  }
+
+  Future<List<Message>> getEventMessages(String eventId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse(
+        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?event_id=$eventId',
+      ),
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((item) => Message.fromJson(item)).toList();
+    } else {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to get event messages';
+      throw AuthException(error);
+    }
+  }
+
+  Future<Event> createEvent({
+    required String groupId,
+    required String title,
+    String? description,
+  }) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.createEvent}'),
+      headers: {
+        'Authorization': 'Bearer ${_token!.trim()}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'group_id': groupId,
+        'title': title,
+        'description': description,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      final data = jsonDecode(response.body);
+      return Event.fromJson(data);
+    } else {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to create event';
+      throw AuthException(error);
+    }
+  }
+
+  Future<List<Event>> getEvents(String groupId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse(
+        '${ApiConstants.baseUrl}${ApiConstants.getEvents}?group_id=$groupId',
+      ),
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((item) => Event.fromJson(item)).toList();
+    } else {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to get events';
+      throw AuthException(error);
+    }
+  }
+
+  Future<void> resolveEvent(String eventId, String messageId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.resolveEvent}'),
+      headers: {
+        'Authorization': 'Bearer ${_token!.trim()}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'event_id': eventId, 'message_id': messageId}),
+    );
+
+    if (response.statusCode != 200) {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to resolve event';
       throw AuthException(error);
     }
   }

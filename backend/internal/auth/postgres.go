@@ -593,6 +593,112 @@ func (p *PostgresAuthenticator) JoinGroup(groupID, userID string) error {
 	return nil
 }
 
+func (p *PostgresAuthenticator) CreateEvent(groupID, title, description, creatorID string) (*models.Event, error) {
+	var eventID string
+	err := p.pool.QueryRow(context.Background(),
+		"INSERT INTO events (group_id, title, description, created_by) VALUES ($1, $2, $3, $4) RETURNING id",
+		groupID, title, description, creatorID).Scan(&eventID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create event: %v", err)
+	}
+
+	chatID, err := p.createEventChat(eventID, groupID)
+	if err != nil {
+		log.Printf("Warning: failed to create event chat: %v", err)
+	}
+
+	event, err := p.getEventByID(eventID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch created event: %v", err)
+	}
+	if chatID != "" {
+		event.ChatID = &chatID
+	}
+	return event, nil
+}
+
+func (p *PostgresAuthenticator) GetEvents(groupID string) ([]models.Event, error) {
+	rows, err := p.pool.Query(context.Background(),
+		"SELECT id, group_id, title, description, created_by, created_at, resolution_message_id FROM events WHERE group_id = $1 ORDER BY created_at DESC",
+		groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get events: %v", err)
+	}
+	defer rows.Close()
+
+	var events []models.Event
+	for rows.Next() {
+		var event models.Event
+		if err := rows.Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatorID, &event.CreatedAt, &event.ResolutionMsgID); err != nil {
+			log.Printf("Error scanning event row: %v", err)
+			continue
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+func (p *PostgresAuthenticator) GetEventByID(eventID string) (*models.Event, error) {
+	event, err := p.getEventByID(eventID)
+	if err != nil {
+		return nil, err
+	}
+	chatID, err := p.getEventChatID(eventID)
+	if err == nil && chatID != "" {
+		event.ChatID = &chatID
+	}
+	return event, nil
+}
+
+func (p *PostgresAuthenticator) getEventByID(eventID string) (*models.Event, error) {
+	var event models.Event
+	err := p.pool.QueryRow(context.Background(),
+		"SELECT id, group_id, title, description, created_by, created_at, resolution_message_id FROM events WHERE id = $1",
+		eventID).Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatorID, &event.CreatedAt, &event.ResolutionMsgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("event not found")
+		}
+		return nil, fmt.Errorf("failed to get event: %v", err)
+	}
+	return &event, nil
+}
+
+func (p *PostgresAuthenticator) createEventChat(eventID, groupID string) (string, error) {
+	var chatID string
+	err := p.pool.QueryRow(context.Background(),
+		"INSERT INTO chats (type, event_id, group_id) VALUES ('event', $1, $2) RETURNING id",
+		eventID, groupID).Scan(&chatID)
+	if err != nil {
+		return "", fmt.Errorf("failed to create event chat: %v", err)
+	}
+	return chatID, nil
+}
+
+func (p *PostgresAuthenticator) getEventChatID(eventID string) (string, error) {
+	var chatID string
+	err := p.pool.QueryRow(context.Background(),
+		"SELECT id FROM chats WHERE event_id = $1 AND type = 'event'",
+		eventID).Scan(&chatID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return chatID, nil
+}
+
+func (p *PostgresAuthenticator) ResolveEvent(eventID, messageID string) error {
+	_, err := p.pool.Exec(context.Background(),
+		"UPDATE events SET resolution_message_id = $1 WHERE id = $2",
+		messageID, eventID)
+	if err != nil {
+		return fmt.Errorf("failed to resolve event: %v", err)
+	}
+	return nil
+}
+
 func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, error) {
 	query := `
 		SELECT g.id, g.name, g.description, g.creator_id, g.created_at, 
@@ -981,6 +1087,47 @@ func (p *PostgresAuthenticator) GetMessages(groupID string) ([]models.Message, e
 	}
 
 	return messages, nil
+}
+
+func (p *PostgresAuthenticator) GetEventMessages(eventID string) ([]models.Message, error) {
+	var chatID string
+	err := p.pool.QueryRow(context.Background(),
+		"SELECT id FROM chats WHERE event_id = $1 AND type = 'event'",
+		eventID).Scan(&chatID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return []models.Message{}, nil
+		}
+		return nil, fmt.Errorf("failed to get event chat: %v", err)
+	}
+
+	query := `
+		SELECT m.id, m.chat_id, m.sender_id, m.type, m.content, m.parent_message_id, m.thread_id, m.is_thread_root, m.created_at, m.updated_at,
+			COALESCE(u.display_name, u.username) as sender_name
+		FROM messages m
+		JOIN users u ON m.sender_id = u.id
+		WHERE m.chat_id = $1
+		ORDER BY m.created_at ASC
+	`
+	rows, err := p.pool.Query(context.Background(), query, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get event messages: %v", err)
+	}
+	defer rows.Close()
+
+	var messages []models.Message
+	for rows.Next() {
+		var msg models.Message
+		var senderName string
+		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.SenderID, &msg.Type, &msg.Content, &msg.ParentMsgID, &msg.ThreadID, &msg.IsThreadRoot, &msg.CreatedAt, &msg.UpdatedAt, &senderName); err != nil {
+			log.Printf("Error scanning message: %v", err)
+			continue
+		}
+		msg.SenderName = senderName
+		messages = append(messages, msg)
+	}
+
+	return messages, rows.Err()
 }
 
 func (p *PostgresAuthenticator) getMessageByID(messageID string) (*models.Message, error) {

@@ -34,4 +34,9 @@ class ApiConstants {
   // Message Endpoints
   static const String sendMessage = '/messages/send';
   static const String getMessages = '/messages';
+
+  // Event Endpoints
+  static const String createEvent = '/events/create';
+  static const String getEvents = '/events';
+  static const String resolveEvent = '/events/resolve';
 }
