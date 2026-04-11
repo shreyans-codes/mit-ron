@@ -704,7 +704,7 @@ func (p *PostgresAuthenticator) CreateEvent(groupID, title, description, creator
 
 func (p *PostgresAuthenticator) GetEvents(groupID string) ([]models.Event, error) {
 	rows, err := p.pool.Query(context.Background(),
-		"SELECT id, group_id, title, description, created_by, created_at, resolution_message_id FROM events WHERE group_id = $1 ORDER BY created_at DESC",
+		"SELECT id, group_id, title, COALESCE(description, ''), created_by, created_at, resolution_message_id FROM events WHERE group_id = $1 ORDER BY created_at DESC",
 		groupID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events: %v", err)
@@ -738,7 +738,7 @@ func (p *PostgresAuthenticator) GetEventByID(eventID string) (*models.Event, err
 func (p *PostgresAuthenticator) getEventByID(eventID string) (*models.Event, error) {
 	var event models.Event
 	err := p.pool.QueryRow(context.Background(),
-		"SELECT id, group_id, title, description, created_by, created_at, resolution_message_id FROM events WHERE id = $1",
+		"SELECT id, group_id, title, COALESCE(description, ''), created_by, created_at, resolution_message_id FROM events WHERE id = $1",
 		eventID).Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatedBy, &event.CreatedAt, &event.ResolutionMsgID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -786,7 +786,7 @@ func (p *PostgresAuthenticator) ResolveEvent(eventID, messageID string) error {
 
 func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, error) {
 	query := `
-		SELECT g.id, g.name, g.description, g.created_by, g.created_at, 
+		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, 
 			(SELECT COUNT(*) FROM public.group_members WHERE group_id = g.id) AS member_count
 		FROM public.groups g
 		JOIN public.group_members gm ON g.id = gm.group_id
@@ -953,7 +953,7 @@ func (p *PostgresAuthenticator) RemoveGroupMember(groupID, adminUserID, memberID
 
 func (p *PostgresAuthenticator) GetGroupByID(groupID string) (*models.Group, error) {
 	query := `
-		SELECT g.id, g.name, g.description, g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
+		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
 		FROM public.groups g
 		LEFT JOIN public.group_members gm ON g.id = gm.group_id
 		WHERE g.id = $1
@@ -977,7 +977,7 @@ func (p *PostgresAuthenticator) GetGroupByID(groupID string) (*models.Group, err
 
 func (p *PostgresAuthenticator) getGroupByID(groupID string) (*models.Group, error) {
 	query := `
-		SELECT g.id, g.name, g.description, g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
+		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
 		FROM public.groups g
 		LEFT JOIN public.group_members gm ON g.id = gm.group_id
 		WHERE g.id = $1

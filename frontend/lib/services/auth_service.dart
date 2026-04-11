@@ -874,7 +874,7 @@ class AuthService {
       id: groupId ?? '',
       name: json['name'] as String,
       description: json['description'] as String? ?? '',
-      creatorId: json['creator_id'] as String,
+      creatorId: json['created_by'] as String? ?? '',
       createdAt: DateTime.parse(json['created_at']),
       memberCount: json['member_count'] as int? ?? 0,
       groupImageUrl: groupImageUrl,
