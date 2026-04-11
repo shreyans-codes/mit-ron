@@ -554,6 +554,17 @@ func (p *PostgresAuthenticator) CreateGroup(name, description, creatorID, avatar
 		return nil, fmt.Errorf("failed to add creator to group: %v", err)
 	}
 
+	// Assign Admin flair to creator (default flair with group_id = NULL)
+	var adminFlairID string
+	err = p.pool.QueryRow(context.Background(),
+		"SELECT id FROM public.flairs WHERE name = 'Admin' AND group_id IS NULL LIMIT 1",
+	).Scan(&adminFlairID)
+	if err == nil && adminFlairID != "" {
+		_, _ = p.pool.Exec(context.Background(),
+			"INSERT INTO public.group_member_flairs (group_id, user_id, flair_id) VALUES ($1, $2, $3)",
+			groupID, creatorID, adminFlairID)
+	}
+
 	// Fetch the created group details
 	group, err := p.getGroupByID(groupID)
 	if err != nil {
@@ -589,6 +600,80 @@ func (p *PostgresAuthenticator) JoinGroup(groupID, userID string) error {
 		groupID, userID)
 	if err != nil {
 		return fmt.Errorf("database error joining group: %v", err)
+	}
+
+	return nil
+}
+
+func (p *PostgresAuthenticator) GetGroupFlairs(groupID string) ([]models.Flair, error) {
+	rows, err := p.pool.Query(context.Background(),
+		"SELECT id, name, group_id FROM public.flairs WHERE group_id = $1 OR group_id IS NULL ORDER BY group_id, name",
+		groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get flairs: %v", err)
+	}
+	defer rows.Close()
+
+	var flairs []models.Flair
+	for rows.Next() {
+		var f models.Flair
+		if err := rows.Scan(&f.ID, &f.Name, &f.GroupID); err != nil {
+			continue
+		}
+		flairs = append(flairs, f)
+	}
+	return flairs, rows.Err()
+}
+
+func (p *PostgresAuthenticator) AddGroupFlair(groupID, name string) (*models.Flair, error) {
+	var flairID string
+	err := p.pool.QueryRow(context.Background(),
+		"INSERT INTO public.flairs (name, group_id) VALUES ($1, $2) RETURNING id",
+		name, groupID).Scan(&flairID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add flair: %v", err)
+	}
+	return &models.Flair{ID: flairID, Name: name, GroupID: &groupID}, nil
+}
+
+func (p *PostgresAuthenticator) GetMemberFlairs(groupID, userID string) ([]models.Flair, error) {
+	rows, err := p.pool.Query(context.Background(),
+		`SELECT f.id, f.name, f.group_id FROM public.flairs f
+		JOIN public.group_member_flairs gmf ON f.id = gmf.flair_id
+		WHERE gmf.group_id = $1 AND gmf.user_id = $2`,
+		groupID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get member flairs: %v", err)
+	}
+	defer rows.Close()
+
+	var flairs []models.Flair
+	for rows.Next() {
+		var f models.Flair
+		if err := rows.Scan(&f.ID, &f.Name, &f.GroupID); err != nil {
+			continue
+		}
+		flairs = append(flairs, f)
+	}
+	return flairs, rows.Err()
+}
+
+func (p *PostgresAuthenticator) AssignFlair(groupID, userID, flairID string) error {
+	_, err := p.pool.Exec(context.Background(),
+		"INSERT INTO public.group_member_flairs (group_id, user_id, flair_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+		groupID, userID, flairID)
+	if err != nil {
+		return fmt.Errorf("failed to assign flair: %v", err)
+	}
+	return nil
+}
+
+func (p *PostgresAuthenticator) RemoveFlair(groupID, userID, flairID string) error {
+	_, err := p.pool.Exec(context.Background(),
+		"DELETE FROM public.group_member_flairs WHERE group_id = $1 AND user_id = $2 AND flair_id = $3",
+		groupID, userID, flairID)
+	if err != nil {
+		return fmt.Errorf("failed to remove flair: %v", err)
 	}
 	return nil
 }
@@ -629,7 +714,7 @@ func (p *PostgresAuthenticator) GetEvents(groupID string) ([]models.Event, error
 	var events []models.Event
 	for rows.Next() {
 		var event models.Event
-		if err := rows.Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatorID, &event.CreatedAt, &event.ResolutionMsgID); err != nil {
+		if err := rows.Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatedBy, &event.CreatedAt, &event.ResolutionMsgID); err != nil {
 			log.Printf("Error scanning event row: %v", err)
 			continue
 		}
@@ -654,7 +739,7 @@ func (p *PostgresAuthenticator) getEventByID(eventID string) (*models.Event, err
 	var event models.Event
 	err := p.pool.QueryRow(context.Background(),
 		"SELECT id, group_id, title, description, created_by, created_at, resolution_message_id FROM events WHERE id = $1",
-		eventID).Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatorID, &event.CreatedAt, &event.ResolutionMsgID)
+		eventID).Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatedBy, &event.CreatedAt, &event.ResolutionMsgID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("event not found")
@@ -718,7 +803,7 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 	for rows.Next() {
 		var group models.Group
 		var memberCount int
-		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &memberCount); err != nil {
+		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &memberCount); err != nil {
 			log.Printf("Error scanning group row: %v", err)
 			continue
 		}
@@ -735,13 +820,16 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 
 func (p *PostgresAuthenticator) GetGroupMembers(groupID string) ([]models.Profile, error) {
 	query := `
-		SELECT u.id, u.username, COALESCE(u.display_name, ''), u.avatar_url, COALESCE(u.bio, '')
+		SELECT u.id, u.username, COALESCE(u.display_name, ''), u.avatar_url, COALESCE(u.bio, ''),
+			(SELECT created_by FROM public.groups WHERE id = $1) = u.id as is_creator,
+			COALESCE(array_agg(f.name ORDER BY f.name) FILTER (WHERE f.name IS NOT NULL), '{}')
 		FROM public.group_members gm
 		JOIN public.users u ON u.id = gm.user_id
+		LEFT JOIN public.group_member_flairs gmf ON gmf.group_id = gm.group_id AND gmf.user_id = gm.user_id
+		LEFT JOIN public.flairs f ON f.id = gmf.flair_id
 		WHERE gm.group_id = $1
-		ORDER BY gm.user_id = (
-			SELECT created_by FROM public.groups WHERE id = $1
-		) DESC, u.username ASC
+		GROUP BY u.id, u.username, u.display_name, u.avatar_url, u.bio
+		ORDER BY is_creator DESC, u.username ASC
 	`
 	rows, err := p.pool.Query(context.Background(), query, groupID)
 	if err != nil {
@@ -752,10 +840,12 @@ func (p *PostgresAuthenticator) GetGroupMembers(groupID string) ([]models.Profil
 	var profiles = []models.Profile{}
 	for rows.Next() {
 		var profile models.Profile
-		if err := rows.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio); err != nil {
+		var flairNames []string
+		if err := rows.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio, &profile.IsCreator, &flairNames); err != nil {
 			log.Printf("Error scanning group member row: %v", err)
 			continue
 		}
+		profile.Flairs = flairNames
 		profiles = append(profiles, profile)
 	}
 
@@ -867,12 +957,12 @@ func (p *PostgresAuthenticator) GetGroupByID(groupID string) (*models.Group, err
 		FROM public.groups g
 		LEFT JOIN public.group_members gm ON g.id = gm.group_id
 		WHERE g.id = $1
-		GROUP BY g.id, g.name, g.description, g.creator_id, g.created_at, g.group_image_url
+		GROUP BY g.id, g.name, g.description, g.created_by, g.created_at, g.group_image_url
 	`
 	row := p.pool.QueryRow(context.Background(), query, groupID)
 	var group models.Group
 	var groupImageURL string
-	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &groupImageURL, &group.MemberCount)
+	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &groupImageURL, &group.MemberCount)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("group not found")
@@ -891,12 +981,12 @@ func (p *PostgresAuthenticator) getGroupByID(groupID string) (*models.Group, err
 		FROM public.groups g
 		LEFT JOIN public.group_members gm ON g.id = gm.group_id
 		WHERE g.id = $1
-		GROUP BY g.id, g.name, g.description, g.creator_id, g.created_at, g.group_image_url
+		GROUP BY g.id, g.name, g.description, g.created_by, g.created_at, g.group_image_url
 	`
 	row := p.pool.QueryRow(context.Background(), query, groupID)
 	var group models.Group
 	var groupImageURL string
-	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatorID, &group.CreatedAt, &groupImageURL, &group.MemberCount)
+	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &groupImageURL, &group.MemberCount)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("group not found")

@@ -24,6 +24,11 @@ type Authenticator interface {
 	AddGroupMember(groupID, userID string) error
 	RemoveGroupMember(groupID, adminUserID, memberID string) error
 	DeleteGroup(groupID, userID string) error
+	GetGroupFlairs(groupID string) ([]models.Flair, error)
+	AddGroupFlair(groupID, name string) (*models.Flair, error)
+	GetMemberFlairs(groupID, userID string) ([]models.Flair, error)
+	AssignFlair(groupID, userID, flairID string) error
+	RemoveFlair(groupID, userID, flairID string) error
 	GetProfile(username string) (*models.Profile, error)
 	GetProfileWithFriendshipStatus(requestingUserID, profileUsername string) (*models.ProfileWithStatus, error)
 	CreateMessage(groupID, senderID, content string, parentID, threadID *string) (*models.Message, error)

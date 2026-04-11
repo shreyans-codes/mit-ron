@@ -19,11 +19,13 @@ type AuthResponse struct {
 }
 
 type Profile struct {
-	ID          string  `json:"id"`
-	Username    string  `json:"username"`
-	DisplayName *string `json:"display_name"`
-	AvatarURL   *string `json:"avatar_url"`
-	Bio         *string `json:"bio"`
+	ID          string   `json:"id"`
+	Username    string   `json:"username"`
+	DisplayName *string  `json:"display_name"`
+	AvatarURL   *string  `json:"avatar_url"`
+	Bio         *string  `json:"bio"`
+	IsCreator   bool     `json:"is_creator,omitempty"`
+	Flairs      []string `json:"flairs,omitempty"`
 }
 
 type ProfileWithStatus struct {
@@ -57,7 +59,19 @@ type Group struct {
 type GroupMember struct {
 	GroupID  string    `json:"group_id"`
 	UserID   string    `json:"user_id"`
+	Role     *string   `json:"role"`
 	JoinedAt time.Time `json:"joined_at"`
+}
+
+type Flair struct {
+	ID      string  `json:"id"`
+	Name    string  `json:"name"`
+	GroupID *string `json:"group_id,omitempty"`
+}
+
+type GroupMemberWithFlairs struct {
+	GroupMember
+	Flairs []Flair `json:"flairs,omitempty"`
 }
 
 type Event struct {
@@ -65,7 +79,7 @@ type Event struct {
 	GroupID         string    `json:"group_id"`
 	Title           string    `json:"title"`
 	Description     *string   `json:"description"`
-	CreatorID       *string   `json:"created_by"`
+	CreatedBy       *string   `json:"created_by"`
 	CreatedAt       time.Time `json:"created_at"`
 	ResolutionMsgID *string   `json:"resolution_message_id"`
 	ChatID          *string   `json:"chat_id,omitempty"`
