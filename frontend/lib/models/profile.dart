@@ -32,21 +32,17 @@ class Profile {
             ?.map((f) => Flair.fromJson(f as Map<String, dynamic>))
             .toList() ??
         [];
-    final isCreator = json['is_creator'] as bool? ?? false;
-    if (isCreator) {
-      flairsList.insert(0, Flair(id: 'admin', name: 'Admin', groupId: null));
-    }
     return Profile(
-      id: json['id'],
-      username: json['username'],
-      displayName: json['display_name'] ?? '',
-      avatarUrl: json['avatar_url'],
-      bio: json['bio'] ?? '',
-      isFriend: json['is_friend'] ?? false,
-      friendStatus: json['friend_status'],
-      isIncoming: json['is_incoming'] ?? false,
+      id: json['id'] as String,
+      username: json['username'] as String,
+      displayName: (json['display_name'] ?? '') as String,
+      avatarUrl: json['avatar_url'] as String?,
+      bio: (json['bio'] ?? '') as String,
+      isFriend: json['is_friend'] as bool? ?? false,
+      friendStatus: json['friend_status'] as String?,
+      isIncoming: json['is_incoming'] as bool? ?? false,
       flairs: flairsList,
-      isCreator: isCreator,
+      isCreator: json['is_creator'] as bool? ?? false,
     );
   }
 

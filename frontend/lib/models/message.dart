@@ -1,34 +1,44 @@
 class Message {
   final String id;
-  final String groupId;
+  final String? groupId;
+  final String? chatId;
   final String senderId;
   final String senderName;
   final String content;
+  final String type;
   final String? threadId;
   final String? parentId;
+  final bool isThreadRoot;
   final DateTime createdAt;
 
   Message({
     required this.id,
-    required this.groupId,
+    this.groupId,
+    this.chatId,
     required this.senderId,
     required this.senderName,
     required this.content,
+    this.type = 'text',
     this.threadId,
     this.parentId,
+    this.isThreadRoot = false,
     required this.createdAt,
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
-      id: json['id'],
-      groupId: json['group_id'],
-      senderId: json['sender_id'],
-      senderName: json['sender_name'] ?? 'Unknown',
-      content: json['content'] ?? '',
-      threadId: json['thread_id'],
-      parentId: json['parent_id'],
-      createdAt: DateTime.parse(json['created_at']),
+      id: json['id'] as String,
+      groupId: json['group_id'] as String?,
+      chatId: json['chat_id'] as String?,
+      senderId: json['sender_id'] as String,
+      senderName:
+          (json['sender_name'] ?? json['senderName'] ?? 'Unknown') as String,
+      content: (json['content'] ?? '') as String,
+      type: (json['type'] ?? 'text') as String,
+      threadId: json['thread_id'] as String?,
+      parentId: json['parent_id'] as String?,
+      isThreadRoot: json['is_thread_root'] as bool? ?? false,
+      createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
 
@@ -36,10 +46,13 @@ class Message {
     return {
       'id': id,
       'group_id': groupId,
+      'chat_id': chatId,
       'sender_id': senderId,
       'content': content,
+      'type': type,
       'thread_id': threadId,
       'parent_id': parentId,
+      'is_thread_root': isThreadRoot,
       'created_at': createdAt.toIso8601String(),
     };
   }

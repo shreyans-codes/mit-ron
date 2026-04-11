@@ -851,6 +851,13 @@ class AuthService {
       bio: json['bio'] as String? ?? '',
       isFriend: json['is_friend'] as bool? ?? false,
       friendStatus: json['friend_status'] as String?,
+      isIncoming: json['is_incoming'] as bool? ?? false,
+      flairs:
+          (json['flairs'] as List<dynamic>?)
+              ?.map((f) => Flair.fromJson(f as Map<String, dynamic>))
+              .toList() ??
+          [],
+      isCreator: json['is_creator'] as bool? ?? false,
     );
   }
 
@@ -886,7 +893,7 @@ class AuthService {
       'id': group.id,
       'name': group.name,
       'description': group.description,
-      'creator_id': group.creatorId,
+      'created_by': group.creatorId,
       'created_at': group.createdAt.toIso8601String(),
       'member_count': group.memberCount,
     };
