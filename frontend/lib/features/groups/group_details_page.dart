@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../models/group.dart';
 import '../../models/profile.dart';
 import '../../models/friend_lists.dart';
@@ -29,10 +30,14 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
   List<Profile> _members = [];
   bool _isLoading = true;
   String? _error;
+  bool _isEditing = false;
+  String? _selectedAvatarPath;
+  late Group _currentGroup;
 
   @override
   void initState() {
     super.initState();
+    _currentGroup = widget.group;
     _loadGroupData();
   }
 
@@ -170,13 +175,175 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
     }
   }
 
+  Future<void> _pickAvatar() async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: ImageSource.gallery);
+    if (file != null) {
+      setState(() => _selectedAvatarPath = file.path);
+    }
+  }
+
+  void _showEditGroupDialog() {
+    final nameController = TextEditingController(text: _currentGroup.name);
+    final descController = TextEditingController(
+      text: _currentGroup.description,
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Group'),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () async {
+                    await _pickAvatar();
+                    if (_selectedAvatarPath != null) {
+                      setDialogState(() {});
+                    }
+                  },
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer,
+                        backgroundImage: _selectedAvatarPath != null
+                            ? FileImage(File(_selectedAvatarPath!))
+                            : _currentGroup.groupImageUrl != null
+                            ? NetworkImage(_currentGroup.groupImageUrl!)
+                            : null,
+                        child:
+                            _selectedAvatarPath == null &&
+                                _currentGroup.groupImageUrl == null
+                            ? Text(
+                                _currentGroup.name.isNotEmpty
+                                    ? _currentGroup.name[0].toUpperCase()
+                                    : 'G',
+                                style: const TextStyle(fontSize: 32),
+                              )
+                            : null,
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: CircleAvatar(
+                          radius: 14,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
+                          child: const Icon(
+                            Icons.edit,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Group Name',
+                    hintText: 'Enter group name',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'Enter description (optional)',
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            MitronButton(
+              type: MitronButtonType.text,
+              label: 'Cancel',
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            MitronButton(
+              type: MitronButtonType.primary,
+              label: 'Save',
+              isLoading: _isEditing,
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Name is required')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                await _updateGroup(name, descController.text.trim());
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateGroup(String name, String description) async {
+    setState(() => _isEditing = true);
+    try {
+      final group = await AuthService.instance.updateGroup(
+        _currentGroup.id,
+        name: name,
+        description: description,
+        avatarPath: _selectedAvatarPath,
+      );
+      if (mounted) {
+        setState(() {
+          _currentGroup = group;
+          _selectedAvatarPath = null;
+        });
+        widget.onMembersUpdated?.call();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Group updated')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update group: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isEditing = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final currentUserId = AuthService.instance.currentUser?.id;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Group Details')),
+      appBar: AppBar(
+        title: const Text('Group Details'),
+        actions: [
+          if (_isCreator)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () => _showEditGroupDialog(),
+              tooltip: 'Edit Group',
+            ),
+        ],
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -194,27 +361,32 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                   CircleAvatar(
                     radius: 50,
                     backgroundColor: theme.colorScheme.primaryContainer,
-                    child: Text(
-                      widget.group.name.isNotEmpty
-                          ? widget.group.name[0].toUpperCase()
-                          : 'G',
-                      style: theme.textTheme.headlineLarge?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
+                    backgroundImage: _currentGroup.groupImageUrl != null
+                        ? NetworkImage(_currentGroup.groupImageUrl!)
+                        : null,
+                    child: _currentGroup.groupImageUrl == null
+                        ? Text(
+                            _currentGroup.name.isNotEmpty
+                                ? _currentGroup.name[0].toUpperCase()
+                                : 'G',
+                            style: theme.textTheme.headlineLarge?.copyWith(
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                          )
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    widget.group.name,
+                    _currentGroup.name,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  if (widget.group.description != null &&
-                      widget.group.description!.isNotEmpty) ...[
+                  if (_currentGroup.description != null &&
+                      _currentGroup.description!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
-                      widget.group.description!,
+                      _currentGroup.description!,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -252,7 +424,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                       final member = _members[index];
                       final isCurrentUser = member.id == currentUserId;
                       final isMemberCreator =
-                          member.id == widget.group.creatorId;
+                          member.id == _currentGroup.creatorId;
                       return _MemberTile(
                         member: member,
                         isCurrentUser: isCurrentUser,

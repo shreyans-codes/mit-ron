@@ -28,12 +28,15 @@ class _GroupChatPageState extends State<GroupChatPage>
   bool _isLoadingEvents = true;
   late TabController _tabController;
   bool _isSending = false;
+  String? _currentUserId;
+  bool get _isCreator => _currentUserId == _currentGroup.creatorId;
 
   @override
   void initState() {
     super.initState();
     _currentGroup = widget.group;
     _memberCount = widget.group.memberCount;
+    _currentUserId = AuthService.instance.currentUser?.id;
     _tabController = TabController(length: 2, vsync: this);
     _loadGroupDetail();
     _loadMessages();
@@ -94,6 +97,51 @@ class _GroupChatPageState extends State<GroupChatPage>
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingEvents = false);
+      }
+    }
+  }
+
+  void _showDeleteEventDialog(Event event) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Event'),
+        content: Text('Are you sure you want to delete "${event.title}"?'),
+        actions: [
+          MitronButton(
+            type: MitronButtonType.text,
+            label: 'Cancel',
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          MitronButton(
+            type: MitronButtonType.destructive,
+            label: 'Delete',
+            onPressed: () {
+              Navigator.pop(ctx);
+              _deleteEvent(event);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteEvent(Event event) async {
+    try {
+      await AuthService.instance.deleteEvent(event.id);
+      if (mounted) {
+        setState(
+          () => _events = _events.where((e) => e.id != event.id).toList(),
+        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Event deleted')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to delete event: $e')));
       }
     }
   }
@@ -317,6 +365,8 @@ class _GroupChatPageState extends State<GroupChatPage>
         itemCount: _events.length,
         itemBuilder: (context, index) {
           final event = _events[index];
+          final isEventCreator = event.creatorId == _currentUserId;
+          final canDelete = isEventCreator || _isCreator;
           return _EventCard(
             event: event,
             onTap: () => Navigator.of(context).push(
@@ -325,6 +375,8 @@ class _GroupChatPageState extends State<GroupChatPage>
                     _EventChatPage(event: event, group: _currentGroup),
               ),
             ),
+            canDelete: canDelete,
+            onDelete: () => _showDeleteEventDialog(event),
           );
         },
       ),
@@ -335,8 +387,15 @@ class _GroupChatPageState extends State<GroupChatPage>
 class _EventCard extends StatelessWidget {
   final Event event;
   final VoidCallback onTap;
+  final bool canDelete;
+  final VoidCallback onDelete;
 
-  const _EventCard({required this.event, required this.onTap});
+  const _EventCard({
+    required this.event,
+    required this.onTap,
+    required this.canDelete,
+    required this.onDelete,
+  });
 
   String _formatDate(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -367,6 +426,30 @@ class _EventCard extends StatelessWidget {
                       style: theme.textTheme.titleMedium,
                     ),
                   ),
+                  if (canDelete)
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (value) {
+                        if (value == 'delete') {
+                          onDelete();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text(
+                                'Delete Event',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   if (event.isResolved)
                     Container(
                       padding: const EdgeInsets.symmetric(

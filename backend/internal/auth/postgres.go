@@ -845,6 +845,41 @@ func (p *PostgresAuthenticator) ResolveEvent(eventID, messageID string) error {
 	return nil
 }
 
+func (p *PostgresAuthenticator) DeleteEvent(eventID string) error {
+	tx, err := p.pool.Begin(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback(context.Background())
+
+	var chatID string
+	err = tx.QueryRow(context.Background(),
+		"SELECT id FROM chats WHERE event_id = $1", eventID).Scan(&chatID)
+	if err == nil && chatID != "" {
+		_, err = tx.Exec(context.Background(),
+			"DELETE FROM messages WHERE chat_id = $1", chatID)
+		if err != nil {
+			return fmt.Errorf("failed to delete event messages: %v", err)
+		}
+		_, err = tx.Exec(context.Background(),
+			"DELETE FROM chats WHERE id = $1", chatID)
+		if err != nil {
+			return fmt.Errorf("failed to delete event chat: %v", err)
+		}
+	}
+
+	_, err = tx.Exec(context.Background(),
+		"DELETE FROM events WHERE id = $1", eventID)
+	if err != nil {
+		return fmt.Errorf("failed to delete event: %v", err)
+	}
+
+	if err := tx.Commit(context.Background()); err != nil {
+		return fmt.Errorf("failed to commit delete: %v", err)
+	}
+	return nil
+}
+
 func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, error) {
 	query := `
 		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, 

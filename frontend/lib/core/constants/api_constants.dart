@@ -40,4 +40,5 @@ class ApiConstants {
   static const String createEvent = '/events/create';
   static const String getEvents = '/events';
   static const String resolveEvent = '/events/resolve';
+  static const String deleteEvent = '/events/delete';
 }

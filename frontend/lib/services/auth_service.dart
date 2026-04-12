@@ -495,6 +495,25 @@ class AuthService {
     }
   }
 
+  Future<void> deleteEvent(String eventId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.deleteEvent}'),
+      headers: {
+        'Authorization': 'Bearer ${_token!.trim()}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'event_id': eventId}),
+    );
+
+    if (response.statusCode != 200) {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to delete event';
+      throw AuthException(error);
+    }
+  }
+
   Future<List<Profile>> getGroupMembers(String groupId) async {
     if (_token == null) throw AuthException('Not authenticated');
 

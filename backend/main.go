@@ -119,6 +119,7 @@ func main() {
 		protected.POST("/events/create", handler.HandleCreateEvent)
 		protected.GET("/events", handler.HandleGetEvents)
 		protected.POST("/events/resolve", handler.HandleResolveEvent)
+		protected.POST("/events/delete", handler.HandleDeleteEvent)
 
 		// Image
 		protected.POST("/generate-image", handler.HandleGenerateImage)

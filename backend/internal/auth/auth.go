@@ -40,4 +40,5 @@ type Authenticator interface {
 	CreateEvent(groupID, title, description, creatorID string) (*models.Event, error)
 	GetEvents(groupID string) ([]models.Event, error)
 	ResolveEvent(eventID, messageID string) error
+	DeleteEvent(eventID string) error
 }

@@ -126,3 +126,7 @@ func (s *SupabaseAuthenticator) GetGroupByID(groupID string) (*models.Group, err
 func (s *SupabaseAuthenticator) GetProfile(username string) (*models.Profile, error) {
 	return nil, errors.New("method not implemented for supabase")
 }
+
+func (s *SupabaseAuthenticator) DeleteEvent(eventID string) error {
+	return errors.New("method not implemented for supabase")
+}
