@@ -574,8 +574,49 @@ func (p *PostgresAuthenticator) CreateGroup(name, description, creatorID, avatar
 	return group, nil
 }
 
+func (p *PostgresAuthenticator) UpdateGroup(groupID, name, description, avatarURL string) (*models.Group, error) {
+	var updateFields []string
+	var updateValues []interface{}
+	var i int
+
+	if name != "" {
+		i++
+		updateFields = append(updateFields, fmt.Sprintf("name = $%d", i))
+		updateValues = append(updateValues, name)
+	}
+	if description != "" || description == "" {
+		i++
+		updateFields = append(updateFields, fmt.Sprintf("description = $%d", i))
+		updateValues = append(updateValues, description)
+	}
+	if avatarURL != "" {
+		i++
+		updateFields = append(updateFields, fmt.Sprintf("group_image_url = $%d", i))
+		updateValues = append(updateValues, avatarURL)
+	}
+
+	if len(updateFields) == 0 {
+		return p.GetGroupByID(groupID)
+	}
+
+	i++
+	updateFields = append(updateFields, fmt.Sprintf("id = $%d", i))
+	updateValues = append(updateValues, groupID)
+
+	query := fmt.Sprintf("UPDATE public.groups SET %s WHERE id = $%d RETURNING id, name, COALESCE(description, ''), created_by, created_at, COALESCE(group_image_url, '')",
+		strings.Join(updateFields[:len(updateFields)-1], ", "), i)
+
+	var group models.Group
+	err := p.pool.QueryRow(context.Background(), query, updateValues...).Scan(
+		&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &group.GroupImageURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update group: %v", err)
+	}
+
+	return &group, nil
+}
+
 func (p *PostgresAuthenticator) JoinGroup(groupID, userID string) error {
-	// Check if group exists
 	var groupExists bool
 	err := p.pool.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM public.groups WHERE id = $1)", groupID).Scan(&groupExists)
 	if err != nil {

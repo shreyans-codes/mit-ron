@@ -107,6 +107,10 @@ func (s *SupabaseAuthenticator) CreateGroup(name, description, creatorID, avatar
 	return nil, errors.New("method not implemented for supabase")
 }
 
+func (s *SupabaseAuthenticator) UpdateGroup(groupID, name, description, avatarURL string) (*models.Group, error) {
+	return nil, errors.New("method not implemented for supabase")
+}
+
 func (s *SupabaseAuthenticator) JoinGroup(groupID, userID string) error {
 	return errors.New("method not implemented for supabase")
 }

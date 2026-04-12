@@ -20,6 +20,7 @@ class ApiConstants {
 
   // Groups Endpoints
   static const String createGroup = '/groups/create';
+  static const String updateGroup = '/groups/update';
   static const String joinGroup = '/groups/join';
   static const String myGroups = '/groups/my';
   static const String groupDetail = '/groups/detail';

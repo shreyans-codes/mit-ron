@@ -192,3 +192,27 @@ func (s *SupabaseStorage) detectContentType(fileName string) string {
 		return "application/octet-stream"
 	}
 }
+
+func (s *SupabaseStorage) DeleteFile(bucket, fileName string) error {
+	req, err := http.NewRequest("DELETE",
+		fmt.Sprintf("%s/storage/v1/object/%s/%s", s.url, bucket, fileName),
+		nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.getKey())
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete failed: %s", string(body))
+	}
+
+	return nil
+}

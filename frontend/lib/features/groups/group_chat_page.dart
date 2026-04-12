@@ -27,6 +27,7 @@ class _GroupChatPageState extends State<GroupChatPage>
   List<Event> _events = [];
   bool _isLoadingEvents = true;
   late TabController _tabController;
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -99,7 +100,9 @@ class _GroupChatPageState extends State<GroupChatPage>
 
   Future<void> _sendMessage() async {
     final content = _messageController.text.trim();
-    if (content.isEmpty) return;
+    if (content.isEmpty || _isSending) return;
+
+    setState(() => _isSending = true);
 
     try {
       final message = await AuthService.instance.sendMessage(
@@ -110,10 +113,12 @@ class _GroupChatPageState extends State<GroupChatPage>
         setState(() {
           _messages = [..._messages, message];
           _messageController.clear();
+          _isSending = false;
         });
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _isSending = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed: $e')));
@@ -275,7 +280,11 @@ class _GroupChatPageState extends State<GroupChatPage>
                   },
                 ),
         ),
-        _MessageInput(controller: _messageController, onSend: _sendMessage),
+        _MessageInput(
+          controller: _messageController,
+          onSend: _sendMessage,
+          isLoading: _isSending,
+        ),
       ],
     );
   }
@@ -415,6 +424,7 @@ class _EventChatPageState extends State<_EventChatPage> {
   final TextEditingController _messageController = TextEditingController();
   List<Message> _messages = [];
   bool _isLoading = true;
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -440,7 +450,10 @@ class _EventChatPageState extends State<_EventChatPage> {
 
   Future<void> _sendMessage() async {
     final content = _messageController.text.trim();
-    if (content.isEmpty) return;
+    if (content.isEmpty || _isSending) return;
+
+    setState(() => _isSending = true);
+
     try {
       final message = await AuthService.instance.sendMessage(
         groupId: widget.group.id,
@@ -451,10 +464,12 @@ class _EventChatPageState extends State<_EventChatPage> {
         setState(() {
           _messages = [..._messages, message];
           _messageController.clear();
+          _isSending = false;
         });
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _isSending = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed: $e')));
@@ -516,7 +531,11 @@ class _EventChatPageState extends State<_EventChatPage> {
                     },
                   ),
           ),
-          _MessageInput(controller: _messageController, onSend: _sendMessage),
+          _MessageInput(
+            controller: _messageController,
+            onSend: _sendMessage,
+            isLoading: _isSending,
+          ),
         ],
       ),
     );
@@ -604,8 +623,13 @@ class _MessageBubble extends StatelessWidget {
 class _MessageInput extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
+  final bool isLoading;
 
-  const _MessageInput({required this.controller, required this.onSend});
+  const _MessageInput({
+    required this.controller,
+    required this.onSend,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -641,12 +665,22 @@ class _MessageInput extends StatelessWidget {
                 ),
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => onSend(),
+                enabled: !isLoading,
               ),
             ),
             const SizedBox(width: 8),
             IconButton.filled(
-              onPressed: onSend,
-              icon: const Icon(Icons.send_rounded),
+              onPressed: isLoading ? null : onSend,
+              icon: isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.send_rounded),
             ),
           ],
         ),

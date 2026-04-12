@@ -17,6 +17,7 @@ type Authenticator interface {
 	RespondToFriendRequest(recipientID, initiatorID string, accept bool) error
 	GetFriendLists(userID string) (*models.FriendLists, error)
 	CreateGroup(name, description, creatorID, avatarURL string) (*models.Group, error)
+	UpdateGroup(groupID, name, description, avatarURL string) (*models.Group, error)
 	JoinGroup(groupID, userID string) error
 	GetMyGroups(userID string) ([]models.Group, error)
 	GetGroupMembers(groupID string) ([]models.Profile, error)

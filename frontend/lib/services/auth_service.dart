@@ -250,6 +250,42 @@ class AuthService {
     }
   }
 
+  Future<Group> updateGroup(
+    String groupId, {
+    String? name,
+    String? description,
+    String? avatarPath,
+  }) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.updateGroup}');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer ${_token!.trim()}';
+    request.fields['group_id'] = groupId;
+    if (name != null) {
+      request.fields['name'] = name;
+    }
+    if (description != null) {
+      request.fields['description'] = description;
+    }
+    if (avatarPath != null) {
+      request.files.add(
+        await http.MultipartFile.fromPath('avatar', avatarPath),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return _groupFromJson(jsonDecode(response.body));
+    } else {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to update group';
+      throw AuthException(error);
+    }
+  }
+
   Future<void> joinGroup(String groupId) async {
     if (_token == null) throw AuthException('Not authenticated');
 

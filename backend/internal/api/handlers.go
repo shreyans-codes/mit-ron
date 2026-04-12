@@ -82,6 +82,13 @@ func (h *Handler) HandleSignout(c *gin.Context) {
 func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 	token := c.GetString("token")
 
+	user, err := h.auth.GetUserFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	currentAvatarURL := user.AvatarURL
 	file, err := c.FormFile("avatar")
 	var avatarURL string
 	if err == nil {
@@ -107,6 +114,9 @@ func (h *Handler) HandleUpdateProfile(c *gin.Context) {
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Upload failed: " + err.Error()})
 			return
+		}
+		if currentAvatarURL != nil && *currentAvatarURL != "" {
+			go h.storage.DeleteFile("avatars", *currentAvatarURL)
 		}
 	} else if !errors.Is(err, http.ErrMissingFile) {
 		log.Printf("Error retrieving avatar file: %v", err)
@@ -429,6 +439,79 @@ func (h *Handler) HandleJoinGroup(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Successfully joined group"})
+}
+
+func (h *Handler) HandleUpdateGroup(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GroupID     string `json:"group_id" binding:"required"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	group, err := h.auth.GetGroupByID(req.GroupID)
+	if err != nil {
+		if err.Error() == "group not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get group: %v", err)})
+		return
+	}
+
+	currentImageURL := group.GroupImageURL
+	avatarURL := ""
+
+	file, err := c.FormFile("avatar")
+	if err == nil {
+		openedFile, err := file.Open()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
+			return
+		}
+		defer openedFile.Close()
+
+		fileBytes, err := io.ReadAll(openedFile)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file"})
+			return
+		}
+
+		fileName := fmt.Sprintf("group_%d_%s", time.Now().UnixNano(), filepath.Base(file.Filename))
+		if h.storage == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Storage provider not initialized"})
+			return
+		}
+		avatarURL, err = h.storage.UploadFile("group-icons", fileName, fileBytes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Upload failed: " + err.Error()})
+			return
+		}
+		if currentImageURL != nil && *currentImageURL != "" {
+			go h.storage.DeleteFile("group-icons", *currentImageURL)
+		}
+	} else if !errors.Is(err, http.ErrMissingFile) {
+		log.Printf("Error retrieving group avatar: %v", err)
+	}
+
+	updatedGroup, err := h.auth.UpdateGroup(req.GroupID, req.Name, req.Description, avatarURL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to update group: %v", err)})
+		return
+	}
+
+	enrichedGroup := h.enrichGroupWithSignedURLs(*updatedGroup)
+	c.JSON(http.StatusOK, enrichedGroup)
 }
 
 func (h *Handler) HandleGetMyGroups(c *gin.Context) {
