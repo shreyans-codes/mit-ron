@@ -3,6 +3,7 @@ import '../../models/group.dart';
 import '../../models/message.dart';
 import '../../models/event.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/mitron_button.dart';
 import 'group_details_page.dart';
 
 class GroupChatPage extends StatefulWidget {
@@ -129,62 +130,63 @@ class _GroupChatPageState extends State<GroupChatPage>
       builder: (ctx) => AlertDialog(
         title: const Text('Create Event'),
         contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                hintText: 'Event title',
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        actionsPadding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+        content: SizedBox(
+          width: double.infinity,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  hintText: 'Event title',
+                ),
+                autofocus: true,
               ),
-              autofocus: true,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: descController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                hintText: 'Optional',
+              const SizedBox(height: 16),
+              TextField(
+                controller: descController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Optional',
+                ),
+                maxLines: 3,
               ),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: FilledButton(
-              onPressed: () async {
-                final title = titleController.text.trim();
-                if (title.isEmpty) return;
-                Navigator.pop(ctx);
-                try {
-                  final event = await AuthService.instance.createEvent(
-                    groupId: widget.group.id,
-                    title: title,
-                    description: descController.text.trim(),
-                  );
-                  if (mounted) {
-                    setState(() => _events = [event, ..._events]);
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text('Failed: $e')));
-                  }
+        ),
+        actions: <Widget>[
+          MitronButton(
+            type: MitronButtonType.text,
+            label: 'Cancel',
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          MitronButton(
+            type: MitronButtonType.primary,
+            label: 'Create',
+            onPressed: () async {
+              final title = titleController.text.trim();
+              if (title.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                final event = await AuthService.instance.createEvent(
+                  groupId: widget.group.id,
+                  title: title,
+                  description: descController.text.trim(),
+                );
+                if (mounted) {
+                  setState(() => _events = [event, ..._events]);
                 }
-              },
-              child: const Text('Create'),
-            ),
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                }
+              }
+            },
           ),
         ],
       ),
@@ -216,12 +218,13 @@ class _GroupChatPageState extends State<GroupChatPage>
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline),
+          MitronIconButton(
+            icon: Icons.add_circle_outline,
             onPressed: _showCreateEventDialog,
+            tooltip: 'Create Event',
           ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
+          MitronIconButton(
+            icon: Icons.info_outline,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => GroupDetailsPage(
@@ -230,6 +233,7 @@ class _GroupChatPageState extends State<GroupChatPage>
                 ),
               ),
             ),
+            tooltip: 'Group Details',
           ),
         ],
         bottom: TabBar(
@@ -286,10 +290,12 @@ class _GroupChatPageState extends State<GroupChatPage>
           children: [
             const Text('No events yet'),
             const SizedBox(height: 16),
-            FilledButton.icon(
+            MitronButton(
+              type: MitronButtonType.primary,
+              label: 'Create Event',
+              icon: Icons.add,
               onPressed: _showCreateEventDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('Create Event'),
+              fullWidth: true,
             ),
           ],
         ),

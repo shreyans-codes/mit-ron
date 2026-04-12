@@ -31,9 +31,11 @@ type Authenticator interface {
 	RemoveFlair(groupID, userID, flairID string) error
 	GetProfile(username string) (*models.Profile, error)
 	GetProfileWithFriendshipStatus(requestingUserID, profileUsername string) (*models.ProfileWithStatus, error)
-	CreateMessage(groupID, senderID, content string, parentID, threadID *string) (*models.Message, error)
+	CreateMessage(chatID, senderID, content string, parentID, threadID *string, isThreadRoot bool) (*models.Message, error)
 	GetMessages(groupID string) ([]models.Message, error)
 	GetEventMessages(eventID string) ([]models.Message, error)
+	GetOrCreateGroupChat(groupID string) (string, error)
+	GetEventChatID(eventID string) (string, error)
 	CreateEvent(groupID, title, description, creatorID string) (*models.Event, error)
 	GetEvents(groupID string) ([]models.Event, error)
 	ResolveEvent(eventID, messageID string) error

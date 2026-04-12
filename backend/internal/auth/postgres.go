@@ -728,7 +728,7 @@ func (p *PostgresAuthenticator) GetEventByID(eventID string) (*models.Event, err
 	if err != nil {
 		return nil, err
 	}
-	chatID, err := p.getEventChatID(eventID)
+	chatID, err := p.GetEventChatID(eventID)
 	if err == nil && chatID != "" {
 		event.ChatID = &chatID
 	}
@@ -760,7 +760,7 @@ func (p *PostgresAuthenticator) createEventChat(eventID, groupID string) (string
 	return chatID, nil
 }
 
-func (p *PostgresAuthenticator) getEventChatID(eventID string) (string, error) {
+func (p *PostgresAuthenticator) GetEventChatID(eventID string) (string, error) {
 	var chatID string
 	err := p.pool.QueryRow(context.Background(),
 		"SELECT id FROM chats WHERE event_id = $1 AND type = 'event'",
@@ -770,6 +770,26 @@ func (p *PostgresAuthenticator) getEventChatID(eventID string) (string, error) {
 			return "", nil
 		}
 		return "", err
+	}
+	return chatID, nil
+}
+
+func (p *PostgresAuthenticator) GetOrCreateGroupChat(groupID string) (string, error) {
+	var chatID string
+	err := p.pool.QueryRow(context.Background(),
+		"SELECT id FROM chats WHERE group_id = $1 AND type = 'group'",
+		groupID).Scan(&chatID)
+	if err == nil {
+		return chatID, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", fmt.Errorf("failed to get group chat: %v", err)
+	}
+	err = p.pool.QueryRow(context.Background(),
+		"INSERT INTO chats (type, group_id) VALUES ('group', $1) RETURNING id",
+		groupID).Scan(&chatID)
+	if err != nil {
+		return "", fmt.Errorf("failed to create group chat: %v", err)
 	}
 	return chatID, nil
 }
@@ -1113,7 +1133,7 @@ func stringValue(s *string) string {
 	return *s
 }
 
-func (p *PostgresAuthenticator) CreateMessage(groupID, senderID, content string, parentID, threadID *string) (*models.Message, error) {
+func (p *PostgresAuthenticator) CreateMessage(chatID, senderID, content string, parentID, threadID *string, isThreadRoot bool) (*models.Message, error) {
 	var messageID string
 	var threadIDPtr, parentIDPtr *string
 
@@ -1128,14 +1148,14 @@ func (p *PostgresAuthenticator) CreateMessage(groupID, senderID, content string,
 	}
 
 	err := p.pool.QueryRow(context.Background(),
-		`INSERT INTO public.messages (group_id, sender_id, content, parent_id, thread_id) 
-		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		groupID, senderID, content, parentIDPtr, threadIDPtr).Scan(&messageID)
+		`INSERT INTO public.messages (chat_id, sender_id, content, parent_message_id, thread_id, is_thread_root, type) 
+		 VALUES ($1, $2, $3, $4, $5, $6, 'text') RETURNING id`,
+		chatID, senderID, content, parentIDPtr, threadIDPtr, isThreadRoot).Scan(&messageID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create message: %v", err)
 	}
 
-	message, err := p.getMessageByID(messageID)
+	message, err := p.getMessageByChatID(chatID, messageID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch created message: %v", err)
 	}
@@ -1143,40 +1163,14 @@ func (p *PostgresAuthenticator) CreateMessage(groupID, senderID, content string,
 }
 
 func (p *PostgresAuthenticator) GetMessages(groupID string) ([]models.Message, error) {
-	query := `
-		SELECT m.id, m.group_id, m.sender_id, m.content, m.message_type, m.thread_id, m.parent_id, m.created_at,
-			COALESCE(u.display_name, u.username) as sender_name
-		FROM public.messages m
-		JOIN public.users u ON m.sender_id = u.id
-		WHERE m.group_id = $1
-		ORDER BY m.created_at ASC
-	`
-	rows, err := p.pool.Query(context.Background(), query, groupID)
+	chatID, err := p.GetOrCreateGroupChat(groupID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get messages: %v", err)
+		return nil, fmt.Errorf("failed to get group chat: %v", err)
 	}
-	defer rows.Close()
-
-	var messages []models.Message
-	for rows.Next() {
-		var msg models.Message
-		var messageType string
-		var senderName string
-		err := rows.Scan(&msg.ID, &msg.GroupID, &msg.SenderID, &msg.Content, &messageType, &msg.ThreadID, &msg.ParentID, &msg.CreatedAt, &senderName)
-		if err != nil {
-			log.Printf("Error scanning message: %v", err)
-			continue
-		}
-		msg.MessageType = models.MessageType(messageType)
-		msg.SenderName = senderName
-		messages = append(messages, msg)
+	if chatID == "" {
+		return []models.Message{}, nil
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating messages: %v", err)
-	}
-
-	return messages, nil
+	return p.GetChatMessages(chatID)
 }
 
 func (p *PostgresAuthenticator) GetEventMessages(eventID string) ([]models.Message, error) {
@@ -1218,6 +1212,58 @@ func (p *PostgresAuthenticator) GetEventMessages(eventID string) ([]models.Messa
 	}
 
 	return messages, rows.Err()
+}
+
+func (p *PostgresAuthenticator) GetChatMessages(chatID string) ([]models.Message, error) {
+	query := `
+		SELECT m.id, m.chat_id, m.sender_id, m.type, m.content, m.parent_message_id, m.thread_id, m.is_thread_root, m.created_at, m.updated_at,
+			COALESCE(u.display_name, u.username) as sender_name
+		FROM messages m
+		JOIN users u ON m.sender_id = u.id
+		WHERE m.chat_id = $1
+		ORDER BY m.created_at ASC
+	`
+	rows, err := p.pool.Query(context.Background(), query, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chat messages: %v", err)
+	}
+	defer rows.Close()
+
+	var messages []models.Message
+	for rows.Next() {
+		var msg models.Message
+		var senderName string
+		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.SenderID, &msg.Type, &msg.Content, &msg.ParentMsgID, &msg.ThreadID, &msg.IsThreadRoot, &msg.CreatedAt, &msg.UpdatedAt, &senderName); err != nil {
+			log.Printf("Error scanning message: %v", err)
+			continue
+		}
+		msg.SenderName = senderName
+		messages = append(messages, msg)
+	}
+
+	return messages, rows.Err()
+}
+
+func (p *PostgresAuthenticator) getMessageByChatID(chatID, messageID string) (*models.Message, error) {
+	query := `
+		SELECT m.id, m.chat_id, m.sender_id, m.type, m.content, m.parent_message_id, m.thread_id, m.is_thread_root, m.created_at, m.updated_at,
+			COALESCE(u.display_name, u.username) as sender_name
+		FROM messages m
+		JOIN users u ON m.sender_id = u.id
+		WHERE m.id = $1 AND m.chat_id = $2
+	`
+	row := p.pool.QueryRow(context.Background(), query, messageID, chatID)
+	var msg models.Message
+	var senderName string
+	err := row.Scan(&msg.ID, &msg.ChatID, &msg.SenderID, &msg.Type, &msg.Content, &msg.ParentMsgID, &msg.ThreadID, &msg.IsThreadRoot, &msg.CreatedAt, &msg.UpdatedAt, &senderName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("message not found")
+		}
+		return nil, fmt.Errorf("failed to get message: %v", err)
+	}
+	msg.SenderName = senderName
+	return &msg, nil
 }
 
 func (p *PostgresAuthenticator) getMessageByID(messageID string) (*models.Message, error) {

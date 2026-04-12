@@ -682,10 +682,12 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 	}
 
 	var req struct {
-		GroupID  string  `json:"group_id" binding:"required"`
-		Content  string  `json:"content" binding:"required"`
-		ParentID *string `json:"parent_id"`
-		ThreadID *string `json:"thread_id"`
+		GroupID      string  `json:"group_id"`
+		EventID      string  `json:"event_id"`
+		Content      string  `json:"content" binding:"required"`
+		ParentID     *string `json:"parent_id"`
+		ThreadID     *string `json:"thread_id"`
+		IsThreadRoot bool    `json:"is_thread_root"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -697,7 +699,25 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 		return
 	}
 
-	message, err := h.auth.CreateMessage(req.GroupID, userID, req.Content, req.ParentID, req.ThreadID)
+	var chatID string
+	if req.EventID != "" {
+		chatID, err = h.auth.GetEventChatID(req.EventID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get event chat"})
+			return
+		}
+	} else if req.GroupID != "" {
+		chatID, err = h.auth.GetOrCreateGroupChat(req.GroupID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get group chat"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id or event_id is required"})
+		return
+	}
+
+	message, err := h.auth.CreateMessage(chatID, userID, req.Content, req.ParentID, req.ThreadID, req.IsThreadRoot)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to send message: %v", err)})
 		return

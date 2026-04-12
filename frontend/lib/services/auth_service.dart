@@ -852,11 +852,7 @@ class AuthService {
       isFriend: json['is_friend'] as bool? ?? false,
       friendStatus: json['friend_status'] as String?,
       isIncoming: json['is_incoming'] as bool? ?? false,
-      flairs:
-          (json['flairs'] as List<dynamic>?)
-              ?.map((f) => Flair.fromJson(f as Map<String, dynamic>))
-              .toList() ??
-          [],
+      flairs: _parseFlairs(json['flairs'] ?? json['flair']),
       isCreator: json['is_creator'] as bool? ?? false,
     );
   }
@@ -869,6 +865,24 @@ class AuthService {
       'avatar_url': profile.avatarUrl,
       'bio': profile.bio,
     };
+  }
+
+  List<Flair> _parseFlairs(dynamic value) {
+    if (value == null) return [];
+    if (value is List) {
+      return value.map((f) {
+        if (f is String) {
+          return Flair(id: f, name: f);
+        } else if (f is Map) {
+          return Flair.fromJson(f as Map<String, dynamic>);
+        }
+        return Flair(id: f.toString(), name: f.toString());
+      }).toList();
+    }
+    if (value is String) {
+      return [Flair(id: value, name: value)];
+    }
+    return [];
   }
 
   Group _groupFromJson(Map<String, dynamic> json) {

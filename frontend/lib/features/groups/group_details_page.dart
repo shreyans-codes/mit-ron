@@ -6,6 +6,7 @@ import '../../models/friend_lists.dart';
 import '../../services/auth_service.dart';
 import '../../services/cache_service.dart';
 import '../../models/group.dart' show Flair;
+import '../../widgets/mitron_button.dart';
 
 class GroupDetailsPage extends StatefulWidget {
   final Group group;
@@ -90,20 +91,18 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
           'Are you sure you want to delete "${widget.group.name}"? This action cannot be undone.',
         ),
         actions: [
-          TextButton(
+          MitronButton(
+            type: MitronButtonType.text,
+            label: 'Cancel',
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
           ),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-              side: BorderSide(color: Theme.of(context).colorScheme.error),
-            ),
+          MitronButton(
+            type: MitronButtonType.destructive,
+            label: 'Delete',
             onPressed: () {
               Navigator.of(context).pop();
               _deleteGroup();
             },
-            child: const Text('Delete'),
           ),
         ],
       ),
@@ -134,20 +133,18 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
           'Are you sure you want to remove ${member.displayName} from "${widget.group.name}"?',
         ),
         actions: [
-          TextButton(
+          MitronButton(
+            type: MitronButtonType.text,
+            label: 'Cancel',
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
           ),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-              side: BorderSide(color: Theme.of(context).colorScheme.error),
-            ),
+          MitronButton(
+            type: MitronButtonType.destructive,
+            label: 'Remove',
             onPressed: () {
               Navigator.of(context).pop();
               _kickMember(member);
             },
-            child: const Text('Remove'),
           ),
         ],
       ),
@@ -227,10 +224,12 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton.icon(
+                    child: MitronButton(
+                      type: MitronButtonType.primary,
+                      label: 'Add Members',
+                      icon: Icons.person_add,
                       onPressed: _showAddMembersDialog,
-                      icon: const Icon(Icons.person_add),
-                      label: const Text('Add Members'),
+                      fullWidth: true,
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -267,14 +266,11 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                     const SizedBox(height: 32),
                     SizedBox(
                       width: double.infinity,
-                      child: OutlinedButton.icon(
+                      child: MitronButton(
+                        type: MitronButtonType.destructive,
+                        label: 'Delete Group',
+                        icon: Icons.delete_outline,
                         onPressed: _showDeleteConfirmation,
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Delete Group'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: theme.colorScheme.error,
-                          side: BorderSide(color: theme.colorScheme.error),
-                        ),
                       ),
                     ),
                   ],
@@ -305,9 +301,6 @@ class _MemberTile extends StatelessWidget {
     final theme = Theme.of(context);
 
     final displayFlairs = List<Flair>.from(member.flairs);
-    if (isCreator) {
-      displayFlairs.insert(0, Flair(id: 'admin', name: 'Admin', groupId: null));
-    }
 
     return Container(
       padding: const EdgeInsets.all(12),
