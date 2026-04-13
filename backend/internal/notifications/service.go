@@ -3,6 +3,7 @@ package notifications
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mitron/backend/internal/models"
@@ -54,13 +55,23 @@ func (s *NotificationService) CreateNotification(userID string, notifType models
 	if s.pushNotifier != nil && s.tokenStore != nil {
 		tokens, err := s.tokenStore.GetTokens(userID)
 		if err == nil && len(tokens) > 0 {
+			log.Printf("Sending push notification to %d device tokens for user %s", len(tokens), userID)
 			for _, token := range tokens {
-				_ = s.pushNotifier.SendPushNotification(token, title, body, map[string]string{
+				err := s.pushNotifier.SendPushNotification(token, title, body, map[string]string{
 					"notification_id": notifID,
 					"type":            string(notifType),
 				})
+				if err != nil {
+					log.Printf("Push notification error: %v", err)
+				} else {
+					log.Printf("Push notification sent successfully")
+				}
 			}
+		} else {
+			log.Printf("No device tokens found for user %s", userID)
 		}
+	} else {
+		log.Printf("Push notifier or token store is nil")
 	}
 
 	return &notif, nil
