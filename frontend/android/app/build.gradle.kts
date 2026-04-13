@@ -1,8 +1,13 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    id("com.google.gms.google-services")
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Only apply Google Services plugin if google-services.json exists
+val googleServicesFile = file("google-services.json")
+if (googleServicesFile.exists()) {
+    plugins.apply("com.google.gms.google-services")
 }
 
 android {

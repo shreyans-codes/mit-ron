@@ -1,25 +1,30 @@
 workflows:
-  flutter-workflow:
-    name: Mitron Flutter iOS
+  flutter-ios-device:
+    name: Mitron iOS Device
     environment:
       flutter: stable
       xcode: latest
       cocoapods: default
     scripts:
-      - name: Set up environment variables
+      - name: Set up Firebase config files
         script: |
-          # Write Firebase config files from environment variables
-          if [ -n "$FIREBASE_CONFIG" ]; then
-            echo "$FIREBASE_CONFIG" > ios/Runner/GoogleService-Info.plist
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" > ios/Runner/GoogleService-Info.plist
           fi
-          if [ -n "$ANDROID_FIREBASE_CONFIG" ]; then
-            echo "$ANDROID_FIREBASE_CONFIG" > android/app/google-services.json
+          if [ -n "$ANDROID_GOOGLE_SERVICES_JSON" ]; then
+            echo "$ANDROID_GOOGLE_SERVICES_JSON" > android/app/google-services.json
           fi
       - name: Get Flutter dependencies
         script: |
           flutter pub get
-      - name: Build iOS project for simulator
+      - name: Set up code signing
         script: |
-          flutter build ios --simulator --no-codesign
+          keychain initialize
+          app-store-connect fetch-signing-files "com.mitron.mitron" --type IOS_APP_STORE
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Build iOS project for device
+        script: |
+          flutter build ios --device --release
     artifacts:
-      - build/ios/iphonesimulator/*.app
+      - build/ios/iphone/*.ipa
