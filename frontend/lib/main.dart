@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import 'core/theme/app_theme_scope.dart';
 import 'core/theme/theme_controller.dart';
+import 'core/constants/api_constants.dart';
 import 'features/auth/login_page.dart';
 import 'features/auth/signup_page.dart';
 import 'features/friends/friends_list_page.dart'; // Import FriendsListPage
@@ -18,10 +23,38 @@ import 'features/users/search/user_search_page.dart'; // Import UserSearchPage
 import 'features/shell/placeholder_home_page.dart';
 import 'services/auth_service.dart';
 import 'services/cache_service.dart';
+import 'services/notification_service.dart';
+import 'services/realtime/supabase_realtime_service.dart';
 import 'features/notifications/notifications_page.dart'; // Import CacheService
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables
+  await dotenv.load(fileName: ".env");
+
+  debugPrint('FCM Project ID: ${ApiConstants.fcmProjectId}');
+  debugPrint('Base URL: ${ApiConstants.baseUrl}');
+
+  // Initialize Firebase (required for FCM)
+  if (ApiConstants.fcmProjectId.isNotEmpty) {
+    try {
+      await Firebase.initializeApp();
+      debugPrint('Firebase initialized successfully');
+    } catch (e) {
+      debugPrint('Firebase initialization failed: $e');
+    }
+  }
+
+  // Initialize Supabase
+  await Supabase.initialize(
+    url: ApiConstants.supabaseUrl,
+    anonKey: ApiConstants.supabaseAnonKey,
+  );
+
+  // Initialize Notification Service (local notifications only)
+  await NotificationService.instance.initialize();
+  NotificationService.instance.setRealtimeService(SupabaseRealtimeService());
 
   // Initialize services
   final themeController = await ThemeController.load();

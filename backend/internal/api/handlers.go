@@ -1151,6 +1151,8 @@ func (h *Handler) HandleRegisterDeviceToken(c *gin.Context) {
 		return
 	}
 
+	log.Printf("Registering device token for user %s, platform=%s", userID, req.Platform)
+
 	if req.Platform != "android" && req.Platform != "ios" && req.Platform != "web" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "platform must be android, ios, or web"})
 		return
@@ -1158,9 +1160,11 @@ func (h *Handler) HandleRegisterDeviceToken(c *gin.Context) {
 
 	err = h.notification.StoreDeviceToken(userID, req.Token, req.Platform)
 	if err != nil {
+		log.Printf("Failed to store device token: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to store device token: %v", err)})
 		return
 	}
 
+	log.Printf("Device token registered successfully for user %s", userID)
 	c.JSON(http.StatusOK, gin.H{"message": "Device token registered"})
 }

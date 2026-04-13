@@ -36,7 +36,15 @@ class _PlaceholderHomePageState extends State<PlaceholderHomePage> {
     NotificationService.instance.setUnreadCountListener((count) {
       if (mounted) setState(() => _unreadCount = count);
     });
-    NotificationService.instance.getUnreadCount();
+    _initializeNotifications();
+  }
+
+  Future<void> _initializeNotifications() async {
+    await NotificationService.instance.getUnreadCount();
+    final user = AuthService.instance.currentUser;
+    if (user != null) {
+      await NotificationService.instance.startRealtimeSubscription(user.id);
+    }
   }
 
   Future<String?> _getCurrentUserAvatarUrl() async {

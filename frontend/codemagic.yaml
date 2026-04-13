@@ -1,0 +1,25 @@
+workflows:
+  flutter-workflow:
+    name: Mitron Flutter iOS
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Set up environment variables
+        script: |
+          # Write Firebase config files from environment variables
+          if [ -n "$FIREBASE_CONFIG" ]; then
+            echo "$FIREBASE_CONFIG" > ios/Runner/GoogleService-Info.plist
+          fi
+          if [ -n "$ANDROID_FIREBASE_CONFIG" ]; then
+            echo "$ANDROID_FIREBASE_CONFIG" > android/app/google-services.json
+          fi
+      - name: Get Flutter dependencies
+        script: |
+          flutter pub get
+      - name: Build iOS project for simulator
+        script: |
+          flutter build ios --simulator --no-codesign
+    artifacts:
+      - build/ios/iphonesimulator/*.app

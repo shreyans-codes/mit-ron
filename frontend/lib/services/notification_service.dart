@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import '../models/notification.dart';
 import '../core/constants/api_constants.dart';
@@ -44,6 +45,32 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
+  }
+
+  Future<void> registerFcmTokenIfLoggedIn() async {
+    if (ApiConstants.fcmProjectId.isEmpty) return;
+
+    final authHeader = AuthService.instance.authorizationHeaderValue;
+    if (authHeader == null) return;
+
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null) {
+        debugPrint('FCM Token: $fcmToken');
+        await _registerFcmToken(fcmToken);
+      }
+    } catch (e) {
+      debugPrint('Failed to get FCM token: $e');
+    }
+  }
+
+  Future<void> _registerFcmToken(String token) async {
+    // Determine platform
+    String platform = 'android';
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      platform = 'ios';
+    }
+    await registerDeviceToken(token, platform);
   }
 
   void setRealtimeService(RealtimeService service) {

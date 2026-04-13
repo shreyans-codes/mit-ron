@@ -1,5 +1,13 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class ApiConstants {
-  static const String baseUrl = 'https://mit-ron.onrender.com';
+  static String get baseUrl =>
+      dotenv.env['API_BASE_URL'] ?? 'https://mit-ron.onrender.com';
+
+  static String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
+  static String get supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+
+  static String get fcmProjectId => dotenv.env['FCM_PROJECT_ID'] ?? '';
 
   // Auth Endpoints
   static const String login = '/login';
@@ -9,8 +17,7 @@ class ApiConstants {
 
   // User Endpoints
   static const String userSearch = '/users/search';
-  static const String profile =
-      '/profile'; // Will be used as /profile/:username
+  static const String profile = '/profile';
 
   // Friends Endpoints
   static const String friendsList = '/friends';

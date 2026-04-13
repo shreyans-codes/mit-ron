@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/mitron_colors.dart';
 import '../../services/auth_exception.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/mitron_brand_header.dart';
 import '../../widgets/theme_picker_button.dart';
 import '../shell/placeholder_home_page.dart';
@@ -37,10 +38,11 @@ class _LoginPageState extends State<LoginPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      final session = await _auth.login(
-        _email.text,
-        _password.text,
-      );
+      final session = await _auth.login(_email.text, _password.text);
+
+      // Register FCM token after successful login
+      await NotificationService.instance.registerFcmTokenIfLoggedIn();
+
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
@@ -49,9 +51,9 @@ class _LoginPageState extends State<LoginPage> {
       );
     } on AuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -66,14 +68,14 @@ class _LoginPageState extends State<LoginPage> {
       body: Stack(
         children: [
           DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: mc.authBackgroundGradient(),
-            ),
+            decoration: BoxDecoration(gradient: mc.authBackgroundGradient()),
             child: SafeArea(
               child: Center(
                 child: SingleChildScrollView(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 420),
                     child: Column(
@@ -95,19 +97,13 @@ class _LoginPageState extends State<LoginPage> {
                               children: [
                                 Text(
                                   'Welcome back',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleLarge
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.w700),
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
                                   'Sign in to your groups and plans.',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
+                                  style: Theme.of(context).textTheme.bodyMedium
                                       ?.copyWith(color: mc.textMuted),
                                 ),
                                 const SizedBox(height: 24),
@@ -120,8 +116,9 @@ class _LoginPageState extends State<LoginPage> {
                                   decoration: const InputDecoration(
                                     labelText: 'Email',
                                     hintText: 'you@example.com',
-                                    prefixIcon:
-                                        Icon(Icons.mail_outline_rounded),
+                                    prefixIcon: Icon(
+                                      Icons.mail_outline_rounded,
+                                    ),
                                   ),
                                   validator: (v) {
                                     final s = v?.trim() ?? '';
@@ -168,8 +165,9 @@ class _LoginPageState extends State<LoginPage> {
                                   alignment: Alignment.centerRight,
                                   child: TextButton(
                                     onPressed: () {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
                                           content: Text(
                                             'Password reset will connect to the backend later.',

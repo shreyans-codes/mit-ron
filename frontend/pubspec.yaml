@@ -42,6 +42,7 @@ dependencies:
   flutter_local_notifications: ^18.0.0
   supabase_flutter: ^2.5.0
   firebase_messaging: ^15.1.0
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -60,10 +61,13 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
 
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
+  # The following line ensures the Material Icons font is
+  # included with your application.
   uses-material-design: true
+
+  # Load environment variables
+  assets:
+    - .env
 
   # To add assets to your application, add an assets section, like this:
   # assets:
