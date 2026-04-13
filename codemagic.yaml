@@ -9,13 +9,14 @@ workflows:
       - name: Set up Firebase config files
         script: |
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            echo "$GOOGLE_SERVICES_JSON" > ios/Runner/GoogleService-Info.plist
+            echo "$GOOGLE_SERVICES_JSON" > frontend/ios/Runner/GoogleService-Info.plist
           fi
           if [ -n "$ANDROID_GOOGLE_SERVICES_JSON" ]; then
-            echo "$ANDROID_GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            echo "$ANDROID_GOOGLE_SERVICES_JSON" > frontend/android/app/google-services.json
           fi
       - name: Get Flutter dependencies
         script: |
+          cd frontend
           flutter pub get
       - name: Set up code signing
         script: |
@@ -25,6 +26,7 @@ workflows:
           xcode-project use-profiles
       - name: Build iOS project for device
         script: |
+          cd frontend
           flutter build ios --device --release
     artifacts:
-      - build/ios/iphone/*.ipa
+      - frontend/build/ios/iphone/*.ipa
