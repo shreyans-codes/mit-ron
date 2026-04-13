@@ -584,7 +584,7 @@ func (p *PostgresAuthenticator) UpdateGroup(groupID, name, description, avatarUR
 		updateFields = append(updateFields, fmt.Sprintf("name = $%d", i))
 		updateValues = append(updateValues, name)
 	}
-	if description != "" || description == "" {
+	if description != "" {
 		i++
 		updateFields = append(updateFields, fmt.Sprintf("description = $%d", i))
 		updateValues = append(updateValues, description)
@@ -997,14 +997,127 @@ func (p *PostgresAuthenticator) DeleteGroup(groupID, userID string) error {
 		return errors.New("only the group creator can delete this group")
 	}
 
-	_, err = p.pool.Exec(ctx, "DELETE FROM public.group_members WHERE group_id = $1", groupID)
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var eventIDs []string
+	eventRows, err := tx.Query(ctx, "SELECT id FROM events WHERE group_id = $1", groupID)
+	if err != nil {
+		return fmt.Errorf("failed to get events: %v", err)
+	}
+	for eventRows.Next() {
+		var eventID string
+		if err := eventRows.Scan(&eventID); err != nil {
+			eventRows.Close()
+			return err
+		}
+		eventIDs = append(eventIDs, eventID)
+	}
+	eventRows.Close()
+
+	if len(eventIDs) > 1 {
+		placeholders := make([]string, len(eventIDs))
+		args := make([]interface{}, len(eventIDs))
+		for i, eid := range eventIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = eid
+		}
+		chatRows, err := tx.Query(ctx, fmt.Sprintf("SELECT id FROM chats WHERE event_id IN (%s)", strings.Join(placeholders, ",")), args...)
+		if err != nil {
+			return fmt.Errorf("failed to get event chats: %v", err)
+		}
+		var chatIDs []string
+		for chatRows.Next() {
+			var chatID string
+			if err := chatRows.Scan(&chatID); err != nil {
+				chatRows.Close()
+				return err
+			}
+			chatIDs = append(chatIDs, chatID)
+		}
+		chatRows.Close()
+
+		if len(chatIDs) > 0 {
+			cPlaceholders := make([]string, len(chatIDs))
+			cArgs := make([]interface{}, len(chatIDs))
+			for i, cid := range chatIDs {
+				cPlaceholders[i] = fmt.Sprintf("$%d", i+1)
+				cArgs[i] = cid
+			}
+			msgPlaceholders := make([]string, len(chatIDs))
+			for i := range chatIDs {
+				msgPlaceholders[i] = fmt.Sprintf("$%d", i+1)
+			}
+			_, err = tx.Exec(ctx, fmt.Sprintf("DELETE FROM message_maps WHERE message_id IN (SELECT id FROM messages WHERE chat_id IN (%s))", strings.Join(msgPlaceholders, ",")), cArgs...)
+			if err != nil {
+				return fmt.Errorf("failed to delete message maps: %v", err)
+			}
+			_, err = tx.Exec(ctx, fmt.Sprintf("DELETE FROM message_links WHERE message_id IN (SELECT id FROM messages WHERE chat_id IN (%s))", strings.Join(msgPlaceholders, ",")), cArgs...)
+			if err != nil {
+				return fmt.Errorf("failed to delete message links: %v", err)
+			}
+			_, err = tx.Exec(ctx, fmt.Sprintf("DELETE FROM message_media WHERE message_id IN (SELECT id FROM messages WHERE chat_id IN (%s))", strings.Join(msgPlaceholders, ",")), cArgs...)
+			if err != nil {
+				return fmt.Errorf("failed to delete message media: %v", err)
+			}
+			_, err = tx.Exec(ctx, fmt.Sprintf("DELETE FROM polls WHERE message_id IN (SELECT id FROM messages WHERE chat_id IN (%s))", strings.Join(msgPlaceholders, ",")), cArgs...)
+			if err != nil {
+				return fmt.Errorf("failed to delete polls: %v", err)
+			}
+			_, err = tx.Exec(ctx, fmt.Sprintf("DELETE FROM messages WHERE chat_id IN (%s)", strings.Join(cPlaceholders, ",")), cArgs...)
+			if err != nil {
+				return fmt.Errorf("failed to delete messages: %v", err)
+			}
+			_, err = tx.Exec(ctx, fmt.Sprintf("DELETE FROM chats WHERE id IN (%s)", strings.Join(cPlaceholders, ",")), cArgs...)
+			if err != nil {
+				return fmt.Errorf("failed to delete chats: %v", err)
+			}
+		}
+	}
+
+	_, err = tx.Exec(ctx, "DELETE FROM events WHERE group_id = $1", groupID)
+	if err != nil {
+		return fmt.Errorf("failed to delete events: %v", err)
+	}
+
+	var groupChatID string
+	err = tx.QueryRow(ctx, "SELECT id FROM chats WHERE group_id = $1 AND type = 'group'", groupID).Scan(&groupChatID)
+	if err == nil && groupChatID != "" {
+		_, err = tx.Exec(ctx, "DELETE FROM messages WHERE chat_id = $1", groupChatID)
+		if err != nil {
+			return fmt.Errorf("failed to delete group messages: %v", err)
+		}
+		_, err = tx.Exec(ctx, "DELETE FROM chats WHERE id = $1", groupChatID)
+		if err != nil {
+			return fmt.Errorf("failed to delete group chat: %v", err)
+		}
+	}
+
+	_, err = tx.Exec(ctx, "DELETE FROM group_member_flairs WHERE group_id = $1", groupID)
+	if err != nil {
+		return fmt.Errorf("failed to delete member flairs: %v", err)
+	}
+
+	_, err = tx.Exec(ctx, "DELETE FROM flairs WHERE group_id = $1", groupID)
+	if err != nil {
+		return fmt.Errorf("failed to delete flairs: %v", err)
+	}
+
+	_, err = tx.Exec(ctx, "DELETE FROM public.group_members WHERE group_id = $1", groupID)
 	if err != nil {
 		return fmt.Errorf("failed to delete group members: %v", err)
 	}
 
-	_, err = p.pool.Exec(ctx, "DELETE FROM public.groups WHERE id = $1", groupID)
+	_, err = tx.Exec(ctx, "DELETE FROM public.groups WHERE id = $1", groupID)
 	if err != nil {
 		return fmt.Errorf("failed to delete group: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit delete: %v", err)
 	}
 
 	return nil

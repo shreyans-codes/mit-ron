@@ -449,17 +449,16 @@ func (h *Handler) HandleUpdateGroup(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		GroupID     string `json:"group_id" binding:"required"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	groupID := c.PostForm("group_id")
+	if groupID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id is required"})
 		return
 	}
 
-	group, err := h.auth.GetGroupByID(req.GroupID)
+	name := c.PostForm("name")
+	description := c.PostForm("description")
+
+	group, err := h.auth.GetGroupByID(groupID)
 	if err != nil {
 		if err.Error() == "group not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -504,7 +503,7 @@ func (h *Handler) HandleUpdateGroup(c *gin.Context) {
 		log.Printf("Error retrieving group avatar: %v", err)
 	}
 
-	updatedGroup, err := h.auth.UpdateGroup(req.GroupID, req.Name, req.Description, avatarURL)
+	updatedGroup, err := h.auth.UpdateGroup(groupID, name, description, avatarURL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to update group: %v", err)})
 		return

@@ -426,9 +426,28 @@ class _EventCard extends StatelessWidget {
                       style: theme.textTheme.titleMedium,
                     ),
                   ),
+                  if (event.isResolved)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Resolved',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 4),
                   if (canDelete)
                     PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert),
+                      offset: const Offset(0, 40),
                       onSelected: (value) {
                         if (value == 'delete') {
                           onDelete();
@@ -449,23 +468,6 @@ class _EventCard extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                  if (event.isResolved)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'Resolved',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: Colors.green.shade700,
-                        ),
-                      ),
                     ),
                 ],
               ),

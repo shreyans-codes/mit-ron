@@ -93,7 +93,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Group'),
         content: Text(
-          'Are you sure you want to delete "${widget.group.name}"? This action cannot be undone.',
+          'Are you sure you want to delete "${widget.group.name}"?\n\nDeleting this group will also delete all events and messages associated with this group. This action cannot be undone.',
         ),
         actions: [
           MitronButton(
@@ -562,6 +562,7 @@ class _MemberTile extends StatelessWidget {
                 Icons.more_vert,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
+              offset: const Offset(0, 40),
               onSelected: (value) {
                 if (value == 'kick') {
                   onKickMember();
