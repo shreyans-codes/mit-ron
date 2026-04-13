@@ -2,6 +2,12 @@ package notifications
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -134,16 +140,14 @@ func (f *FCMNotifier) getAccessTokenFromCredentials() (string, error) {
 
 func (f *FCMNotifier) getAccessTokenFromFile(path string) (string, error) {
 	type ServiceAccount struct {
-		Type                string `json:"type"`
-		ProjectID           string `json:"project_id"`
-		PrivateKeyID        string `json:"private_key_id"`
-		PrivateKey          string `json:"private_key"`
-		ClientEmail         string `json:"client_email"`
-		ClientID            string `json:"client_id"`
-		AuthURI             string `json:"auth_uri"`
-		TokenURI            string `json:"token_uri"`
-		AuthProviderX509URL string `json:"auth_provider_x509_url"`
-		ClientX509CertURL   string `json:"client_x509_cert_url"`
+		Type         string `json:"type"`
+		ProjectID    string `json:"project_id"`
+		PrivateKeyID string `json:"private_key_id"`
+		PrivateKey   string `json:"private_key"`
+		ClientEmail  string `json:"client_email"`
+		ClientID     string `json:"client_id"`
+		AuthURI      string `json:"auth_uri"`
+		TokenURI     string `json:"token_uri"`
 	}
 
 	data, err := os.ReadFile(path)
@@ -156,11 +160,85 @@ func (f *FCMNotifier) getAccessTokenFromFile(path string) (string, error) {
 		return "", fmt.Errorf("failed to parse credentials: %w", err)
 	}
 
-	jwt := fmt.Sprintf("test.jwt.token") // Simplified for now
-	_ = jwt
-	_ = creds
+	// Parse private key
+	privateKeyBytes := []byte(creds.PrivateKey)
 
-	return "", fmt.Errorf("JWT token generation not implemented - use metadata or env var")
+	// Try to decode from base64 if it's base64 encoded
+	keyDecoded, err := base64.RawURLEncoding.DecodeString(creds.PrivateKey)
+	if err == nil {
+		privateKeyBytes = keyDecoded
+	}
+
+	// Parse as PKCS1 or PKCS8
+	var privateKey *rsa.PrivateKey
+	if key, err := x509.ParsePKCS1PrivateKey(privateKeyBytes); err == nil {
+		privateKey = key
+	} else if key, err := x509.ParsePKCS8PrivateKey(privateKeyBytes); err == nil {
+		privateKey = key.(*rsa.PrivateKey)
+	} else {
+		log.Printf("Failed to parse private key: %v", err)
+		return "", fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	// Create JWT header and payload
+	header := `{"alg":"RS256","typ":"JWT"}`
+	now := time.Now()
+	payload := fmt.Sprintf(`{
+		"iss":"%s",
+		"sub":"%s",
+		"aud":"https://oauth2.googleapis.com",
+		"iat":%d,
+		"exp":%d
+	}`, creds.ClientEmail, creds.ClientEmail, now.Unix(), now.Add(3600).Unix())
+
+	headerEncoded := base64.RawURLEncoding.EncodeToString([]byte(header))
+	payloadEncoded := base64.RawURLEncoding.EncodeToString([]byte(payload))
+	signingInput := headerEncoded + "." + payloadEncoded
+
+	// Sign the JWT
+	hash := sha256.Sum256([]byte(signingInput))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
+	if err != nil {
+		return "", fmt.Errorf("failed to sign JWT: %w", err)
+	}
+
+	jwtAssertion := signingInput + "." + base64.RawURLEncoding.EncodeToString(signature)
+
+	// Exchange JWT for access token
+	tokenURL := creds.TokenURI
+	if tokenURL == "" {
+		tokenURL = "https://oauth2.googleapis.com/token"
+	}
+
+	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(
+		"grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion="+jwtAssertion))
+	if err != nil {
+		return "", fmt.Errorf("failed to create token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := f.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to exchange JWT for token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Token exchange response: %s", string(body))
+		return "", fmt.Errorf("token exchange failed with status %d", resp.StatusCode)
+	}
+
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", fmt.Errorf("failed to decode token response: %w", err)
+	}
+
+	log.Printf("Successfully obtained FCM access token")
+	return tokenResp.AccessToken, nil
 }
 
 func (f *FCMNotifier) getAccessTokenFromMetadata() (string, error) {
