@@ -130,3 +130,7 @@ func (s *SupabaseAuthenticator) GetProfile(username string) (*models.Profile, er
 func (s *SupabaseAuthenticator) DeleteEvent(eventID string) error {
 	return errors.New("method not implemented for supabase")
 }
+
+func (s *SupabaseAuthenticator) UpdateEvent(eventID, title, description string) (*models.Event, error) {
+	return nil, errors.New("method not implemented for supabase")
+}

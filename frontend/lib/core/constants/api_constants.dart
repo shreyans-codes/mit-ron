@@ -41,4 +41,12 @@ class ApiConstants {
   static const String getEvents = '/events';
   static const String resolveEvent = '/events/resolve';
   static const String deleteEvent = '/events/delete';
+  static const String updateEvent = '/events/update';
+
+  // Notification Endpoints
+  static const String getNotifications = '/notifications';
+  static const String markNotificationRead = '/notifications/:id/read';
+  static const String markAllNotificationsRead = '/notifications/read-all';
+  static const String unreadNotificationCount = '/notifications/unread-count';
+  static const String registerDeviceToken = '/device-token';
 }

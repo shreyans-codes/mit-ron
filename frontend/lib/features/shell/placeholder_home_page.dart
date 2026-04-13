@@ -5,6 +5,7 @@ import '../../core/theme/mitron_colors.dart';
 import '../../models/auth_session.dart';
 import '../../services/auth_service.dart';
 import '../../services/cache_service.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/app_version_footer.dart';
 import '../../widgets/auth_token_footer.dart';
 import '../auth/login_page.dart';
@@ -13,13 +14,30 @@ import '../groups/group_list_page.dart';
 import '../settings/settings_page.dart';
 import '../users/profile/user_profile_page.dart';
 import '../users/search/user_search_page.dart';
+import '../notifications/notifications_page.dart';
 
-class PlaceholderHomePage extends StatelessWidget {
+class PlaceholderHomePage extends StatefulWidget {
   const PlaceholderHomePage({super.key, this.session});
 
   static const String routeName = '/home';
 
   final AuthSession? session;
+
+  @override
+  State<PlaceholderHomePage> createState() => _PlaceholderHomePageState();
+}
+
+class _PlaceholderHomePageState extends State<PlaceholderHomePage> {
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.instance.setUnreadCountListener((count) {
+      if (mounted) setState(() => _unreadCount = count);
+    });
+    NotificationService.instance.getUnreadCount();
+  }
 
   Future<String?> _getCurrentUserAvatarUrl() async {
     final user = AuthService.instance.currentUser;
@@ -49,6 +67,42 @@ class PlaceholderHomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Mitron'),
         actions: [
+          Stack(
+            children: [
+              IconButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed(NotificationsPage.routeName);
+                },
+                icon: const Icon(Icons.notifications_outlined),
+                tooltip: 'Notifications',
+              ),
+              if (_unreadCount > 0)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    child: Text(
+                      _unreadCount > 99 ? '99+' : '$_unreadCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             onPressed: () {
               Navigator.of(context).pushNamed(UserSearchPage.routeName);

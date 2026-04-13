@@ -17,7 +17,8 @@ import 'features/users/profile/user_profile_page.dart'; // Import UserProfilePag
 import 'features/users/search/user_search_page.dart'; // Import UserSearchPage
 import 'features/shell/placeholder_home_page.dart';
 import 'services/auth_service.dart';
-import 'services/cache_service.dart'; // Import CacheService
+import 'services/cache_service.dart';
+import 'features/notifications/notifications_page.dart'; // Import CacheService
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +89,7 @@ class MitronApp extends StatelessWidget {
                   ),
                 );
               },
+              NotificationsPage.routeName: (_) => const NotificationsPage(),
             },
           );
         },

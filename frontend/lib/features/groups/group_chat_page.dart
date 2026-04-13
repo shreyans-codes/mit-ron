@@ -146,6 +146,93 @@ class _GroupChatPageState extends State<GroupChatPage>
     }
   }
 
+  void _showEditEventDialog(Event event) {
+    final titleController = TextEditingController(text: event.title);
+    final descController = TextEditingController(text: event.description);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Event'),
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        content: SizedBox(
+          width: double.infinity,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  hintText: 'Event title',
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: descController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Optional',
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          MitronButton(
+            type: MitronButtonType.text,
+            label: 'Cancel',
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          MitronButton(
+            type: MitronButtonType.primary,
+            label: 'Save',
+            onPressed: () async {
+              final title = titleController.text.trim();
+              if (title.isEmpty) return;
+              Navigator.pop(ctx);
+              await _updateEvent(event, title, descController.text.trim());
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateEvent(
+    Event event,
+    String title,
+    String description,
+  ) async {
+    try {
+      final updatedEvent = await AuthService.instance.updateEvent(
+        event.id,
+        title: title,
+        description: description,
+      );
+      if (mounted) {
+        setState(() {
+          final idx = _events.indexWhere((e) => e.id == event.id);
+          if (idx != -1) {
+            _events[idx] = updatedEvent;
+          }
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Event updated')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update event: $e')));
+      }
+    }
+  }
+
   Future<void> _sendMessage() async {
     final content = _messageController.text.trim();
     if (content.isEmpty || _isSending) return;
@@ -366,7 +453,7 @@ class _GroupChatPageState extends State<GroupChatPage>
         itemBuilder: (context, index) {
           final event = _events[index];
           final isEventCreator = event.creatorId == _currentUserId;
-          final canDelete = isEventCreator || _isCreator;
+          final canEdit = isEventCreator || _isCreator;
           return _EventCard(
             event: event,
             onTap: () => Navigator.of(context).push(
@@ -375,7 +462,8 @@ class _GroupChatPageState extends State<GroupChatPage>
                     _EventChatPage(event: event, group: _currentGroup),
               ),
             ),
-            canDelete: canDelete,
+            canEdit: canEdit,
+            onEdit: () => _showEditEventDialog(event),
             onDelete: () => _showDeleteEventDialog(event),
           );
         },
@@ -387,13 +475,15 @@ class _GroupChatPageState extends State<GroupChatPage>
 class _EventCard extends StatelessWidget {
   final Event event;
   final VoidCallback onTap;
-  final bool canDelete;
+  final bool canEdit;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _EventCard({
     required this.event,
     required this.onTap,
-    required this.canDelete,
+    required this.canEdit,
+    required this.onEdit,
     required this.onDelete,
   });
 
@@ -444,16 +534,28 @@ class _EventCard extends StatelessWidget {
                       ),
                     ),
                   const SizedBox(width: 4),
-                  if (canDelete)
+                  if (canEdit)
                     PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert),
                       offset: const Offset(0, 40),
                       onSelected: (value) {
-                        if (value == 'delete') {
+                        if (value == 'edit') {
+                          onEdit();
+                        } else if (value == 'delete') {
                           onDelete();
                         }
                       },
                       itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_outlined),
+                              SizedBox(width: 8),
+                              Text('Edit Event'),
+                            ],
+                          ),
+                        ),
                         const PopupMenuItem(
                           value: 'delete',
                           child: Row(

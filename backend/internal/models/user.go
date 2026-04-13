@@ -159,3 +159,42 @@ type MessageLink struct {
 	Description  *string `json:"description"`
 	PreviewImage *string `json:"preview_image"`
 }
+
+type NotificationType string
+
+const (
+	NotificationTypeNewMessage     NotificationType = "new_message"
+	NotificationTypeFriendRequest  NotificationType = "friend_request"
+	NotificationTypeGroupAdded     NotificationType = "group_added"
+	NotificationTypeFriendResponse NotificationType = "friend_response"
+)
+
+type ReferenceType string
+
+const (
+	ReferenceTypeMessage ReferenceType = "message"
+	ReferenceTypeGroup   ReferenceType = "group"
+	ReferenceTypeFriend  ReferenceType = "friend"
+	ReferenceTypeEvent   ReferenceType = "event"
+)
+
+type Notification struct {
+	ID            string           `json:"id"`
+	UserID        string           `json:"user_id"`
+	Type          NotificationType `json:"type"`
+	ReferenceID   *string          `json:"reference_id,omitempty"`
+	ReferenceType *ReferenceType   `json:"reference_type,omitempty"`
+	Title         string           `json:"title"`
+	Body          *string          `json:"body,omitempty"`
+	IsRead        bool             `json:"is_read"`
+	CreatedAt     time.Time        `json:"created_at"`
+}
+
+type DeviceToken struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	Token     string    `json:"token"`
+	Platform  string    `json:"platform"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}

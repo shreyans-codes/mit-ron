@@ -845,6 +845,43 @@ func (p *PostgresAuthenticator) ResolveEvent(eventID, messageID string) error {
 	return nil
 }
 
+func (p *PostgresAuthenticator) UpdateEvent(eventID, title, description string) (*models.Event, error) {
+	var updateFields []string
+	var updateValues []interface{}
+	var i int
+
+	if title != "" {
+		i++
+		updateFields = append(updateFields, fmt.Sprintf("title = $%d", i))
+		updateValues = append(updateValues, title)
+	}
+	if description != "" {
+		i++
+		updateFields = append(updateFields, fmt.Sprintf("description = $%d", i))
+		updateValues = append(updateValues, description)
+	}
+
+	if len(updateFields) == 0 {
+		return p.getEventByID(eventID)
+	}
+
+	i++
+	updateFields = append(updateFields, fmt.Sprintf("id = $%d", i))
+	updateValues = append(updateValues, eventID)
+
+	query := fmt.Sprintf("UPDATE events SET %s WHERE id = $%d RETURNING id, group_id, title, COALESCE(description, ''), created_by, created_at, resolution_message_id",
+		strings.Join(updateFields[:len(updateFields)-1], ", "), i)
+
+	var event models.Event
+	err := p.pool.QueryRow(context.Background(), query, updateValues...).Scan(
+		&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatedBy, &event.CreatedAt, &event.ResolutionMsgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update event: %v", err)
+	}
+
+	return &event, nil
+}
+
 func (p *PostgresAuthenticator) DeleteEvent(eventID string) error {
 	tx, err := p.pool.Begin(context.Background())
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/mitron/backend/internal/api"
 	"github.com/mitron/backend/internal/auth"
 	"github.com/mitron/backend/internal/middleware"
+	"github.com/mitron/backend/internal/notifications"
 	"github.com/mitron/backend/internal/storage"
 )
 
@@ -38,9 +39,6 @@ func main() {
 		log.Fatalf("Failed to parse DATABASE_URL: %v", err)
 	}
 
-	// pgx v5 uses StatementCacheCapacity / DefaultQueryExecMode, not MaxPreparedStatements.
-	// Transaction poolers (e.g. Supabase :6543, PgBouncer) break named prepared statements
-	// (stmtcache_*), which surfaces as SQLSTATE 42P05 "already exists".
 	if useSimplePostgresProtocol(dbURL) {
 		poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 		poolConfig.ConnConfig.StatementCacheCapacity = 0
@@ -60,13 +58,35 @@ func main() {
 	}
 
 	storageProvider := storage.NewSupabaseStorage(supabaseURL, supabaseAnonKey, supabaseServiceKey)
-	handler := api.NewHandler(authenticator, storageProvider)
+
+	var notifService *notifications.NotificationService
+	realtimeNotifier, err := notifications.NewSupabaseRealtimeNotifier(supabaseURL, supabaseAnonKey, dbPool)
+	if err != nil {
+		log.Printf("Warning: Failed to create realtime notifier: %v", err)
+	}
+
+	fcmProjectID := os.Getenv("FCM_PROJECT_ID")
+	var pushNotifier notifications.PushNotifier
+	if fcmProjectID != "" {
+		pushNotifier = notifications.NewFCMNotifier(&notifications.FCMConfig{
+			ProjectID: fcmProjectID,
+		})
+		log.Printf("FCM push notifications enabled for project: %s", fcmProjectID)
+	} else {
+		log.Println("FCM push notifications not configured (set FCM_PROJECT_ID)")
+	}
+
+	tokenStore := notifications.NewPostgresDeviceTokenStore(dbPool)
+
+	notifService = notifications.NewNotificationService(dbPool, realtimeNotifier, pushNotifier, tokenStore)
+	log.Println("Notification service initialized")
+
+	handler := api.NewHandler(authenticator, storageProvider, notifService)
 
 	r := gin.Default()
 
-	// CORS configuration
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"}, // Adjust this in production
+		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -74,33 +94,27 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// Health check for Render
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// Public routes
 	r.POST("/signup", handler.HandleSignup)
 	r.POST("/login", handler.HandleLogin)
 
-	// Protected routes
 	protected := r.Group("/")
 	protected.Use(middleware.AuthMiddleware(authenticator))
 	{
 		protected.POST("/signout", handler.HandleSignout)
 		protected.POST("/profile/update", handler.HandleUpdateProfile)
 
-		// User profile and search
 		protected.GET("/users/search", handler.HandleSearchUsers)
 		protected.GET("/profile/:username", handler.HandleGetProfile)
 
-		// Friends
 		protected.GET("/friends", handler.HandleGetFriendLists)
 		protected.POST("/friends/add", handler.HandleAddFriend)
 		protected.POST("/friends/remove", handler.HandleRemoveFriend)
 		protected.POST("/friends/respond", handler.HandleRespondToFriendRequest)
 
-		// Groups
 		protected.POST("/groups/create", handler.HandleCreateGroup)
 		protected.POST("/groups/join", handler.HandleJoinGroup)
 		protected.GET("/groups/my", handler.HandleGetMyGroups)
@@ -111,18 +125,22 @@ func main() {
 		protected.POST("/groups/delete", handler.HandleDeleteGroup)
 		protected.POST("/groups/update", handler.HandleUpdateGroup)
 
-		// Messages
 		protected.POST("/messages/send", handler.HandleSendMessage)
 		protected.GET("/messages", handler.HandleGetMessages)
 
-		// Events
 		protected.POST("/events/create", handler.HandleCreateEvent)
 		protected.GET("/events", handler.HandleGetEvents)
 		protected.POST("/events/resolve", handler.HandleResolveEvent)
 		protected.POST("/events/delete", handler.HandleDeleteEvent)
+		protected.POST("/events/update", handler.HandleUpdateEvent)
 
-		// Image
 		protected.POST("/generate-image", handler.HandleGenerateImage)
+
+		protected.GET("/notifications", handler.HandleGetNotifications)
+		protected.PATCH("/notifications/:id/read", handler.HandleMarkNotificationRead)
+		protected.PATCH("/notifications/read-all", handler.HandleMarkAllNotificationsRead)
+		protected.GET("/notifications/unread-count", handler.HandleGetUnreadNotificationCount)
+		protected.POST("/device-token", handler.HandleRegisterDeviceToken)
 	}
 
 	port := os.Getenv("PORT")
@@ -130,14 +148,11 @@ func main() {
 		port = "8080"
 	}
 
-	// Explicitly bind to 0.0.0.0 for Render compatibility
 	addr := "0.0.0.0:" + port
 	log.Printf("Server starting on %s", addr)
 	r.Run(addr)
 }
 
-// useSimplePostgresProtocol returns true when DATABASE_URL likely points at a
-// transaction pooler or when PGX_SIMPLE_PROTOCOL=1 forces it.
 func useSimplePostgresProtocol(dbURL string) bool {
 	if os.Getenv("PGX_SIMPLE_PROTOCOL") == "1" {
 		return true

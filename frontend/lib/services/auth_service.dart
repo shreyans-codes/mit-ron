@@ -514,6 +514,36 @@ class AuthService {
     }
   }
 
+  Future<Event> updateEvent(
+    String eventId, {
+    String? title,
+    String? description,
+  }) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.updateEvent}');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer ${_token!.trim()}';
+    request.fields['event_id'] = eventId;
+    if (title != null) {
+      request.fields['title'] = title;
+    }
+    if (description != null) {
+      request.fields['description'] = description;
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return Event.fromJson(jsonDecode(response.body));
+    } else {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to update event';
+      throw AuthException(error);
+    }
+  }
+
   Future<List<Profile>> getGroupMembers(String groupId) async {
     if (_token == null) throw AuthException('Not authenticated');
 

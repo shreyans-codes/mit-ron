@@ -13,16 +13,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mitron/backend/internal/auth"
 	"github.com/mitron/backend/internal/models"
+	"github.com/mitron/backend/internal/notifications"
 	"github.com/mitron/backend/internal/storage"
 )
 
 type Handler struct {
-	auth    auth.Authenticator
-	storage storage.StorageProvider
+	auth         auth.Authenticator
+	storage      storage.StorageProvider
+	notification *notifications.NotificationService
 }
 
-func NewHandler(a auth.Authenticator, s storage.StorageProvider) *Handler {
-	return &Handler{auth: a, storage: s}
+func NewHandler(a auth.Authenticator, s storage.StorageProvider, n *notifications.NotificationService) *Handler {
+	return &Handler{auth: a, storage: s, notification: n}
 }
 
 type AuthRequest struct {
@@ -782,17 +784,24 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 	}
 
 	var chatID string
+	var groupName string
+	var isEventChat bool
 	if req.EventID != "" {
 		chatID, err = h.auth.GetEventChatID(req.EventID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get event chat"})
 			return
 		}
+		isEventChat = true
 	} else if req.GroupID != "" {
 		chatID, err = h.auth.GetOrCreateGroupChat(req.GroupID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get group chat"})
 			return
+		}
+		group, err := h.auth.GetGroupByID(req.GroupID)
+		if err == nil {
+			groupName = group.Name
 		}
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id or event_id is required"})
@@ -803,6 +812,58 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to send message: %v", err)})
 		return
+	}
+
+	if h.notification != nil {
+		go func() {
+			var targetGroupID string
+			if isEventChat {
+				targetGroupID = req.EventID
+			} else {
+				targetGroupID = req.GroupID
+			}
+
+			members, err := h.auth.GetGroupMembers(targetGroupID)
+			if err != nil {
+				log.Printf("Failed to get group members for notifications: %v", err)
+				return
+			}
+
+			title := "New Message"
+			if groupName != "" {
+				title = groupName
+			}
+			if isEventChat {
+				title = "New Event Message"
+			}
+
+			body := message.Content
+			if len(body) > 50 {
+				body = body[:50] + "..."
+			}
+			user, _ := h.auth.GetUserFromToken(token)
+			if user != nil {
+				body = fmt.Sprintf("%s: %s", user.Username, body)
+			}
+
+			refType := models.ReferenceTypeGroup
+			if isEventChat {
+				refType = models.ReferenceTypeEvent
+			}
+
+			for _, member := range members {
+				if member.ID != userID {
+					_, _ = h.notification.CreateNotification(
+						member.ID,
+						models.NotificationTypeNewMessage,
+						&message.ID,
+						&refType,
+						title,
+						body,
+					)
+				}
+			}
+		}()
 	}
 
 	c.JSON(http.StatusCreated, message)
@@ -937,4 +998,169 @@ func (h *Handler) HandleDeleteEvent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Event deleted"})
+}
+
+func (h *Handler) HandleUpdateEvent(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	eventID := c.PostForm("event_id")
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "event_id is required"})
+		return
+	}
+
+	title := c.PostForm("title")
+	description := c.PostForm("description")
+
+	event, err := h.auth.UpdateEvent(eventID, title, description)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to update event: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, event)
+}
+
+func (h *Handler) HandleGetNotifications(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if h.notification == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Notification service not available"})
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if l := c.Query("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	if o := c.Query("offset"); o != "" {
+		fmt.Sscanf(o, "%d", &offset)
+	}
+
+	notifs, err := h.notification.GetNotifications(userID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get notifications: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, notifs)
+}
+
+func (h *Handler) HandleMarkNotificationRead(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if h.notification == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Notification service not available"})
+		return
+	}
+
+	notifID := c.Param("id")
+	if notifID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "notification id is required"})
+		return
+	}
+
+	err = h.notification.MarkAsRead(notifID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to mark notification as read: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Notification marked as read"})
+}
+
+func (h *Handler) HandleMarkAllNotificationsRead(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if h.notification == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Notification service not available"})
+		return
+	}
+
+	err = h.notification.MarkAllAsRead(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to mark all notifications as read: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "All notifications marked as read"})
+}
+
+func (h *Handler) HandleGetUnreadNotificationCount(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if h.notification == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Notification service not available"})
+		return
+	}
+
+	count, err := h.notification.GetUnreadCount(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get unread count: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"unread_count": count})
+}
+
+func (h *Handler) HandleRegisterDeviceToken(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if h.notification == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Notification service not available"})
+		return
+	}
+
+	var req struct {
+		Token    string `json:"token" binding:"required"`
+		Platform string `json:"platform" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Platform != "android" && req.Platform != "ios" && req.Platform != "web" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "platform must be android, ios, or web"})
+		return
+	}
+
+	err = h.notification.StoreDeviceToken(userID, req.Token, req.Platform)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to store device token: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Device token registered"})
 }
