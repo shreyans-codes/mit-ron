@@ -2,24 +2,16 @@ package notifications
 
 import (
 	"context"
-	"crypto"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
-	"strings"
 	"sync"
-	"time"
 
+	firebase "firebase.google.com/go/v4"
+	"firebase.google.com/go/v4/messaging"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mitron/backend/internal/models"
+	"google.golang.org/api/option"
 )
 
 type FCMConfig struct {
@@ -27,36 +19,45 @@ type FCMConfig struct {
 	CredentialsFile string
 }
 
-type FCMNotificationPayload struct {
-	Message struct {
-		Token        string `json:"token"`
-		Notification struct {
-			Title string `json:"title"`
-			Body  string `json:"body"`
-		} `json:"notification"`
-		Data map[string]string `json:"data,omitempty"`
-	} `json:"message"`
-}
-
-type FCMResponse struct {
-	Name string `json:"name"`
-}
-
 type FCMNotifier struct {
-	config      *FCMConfig
-	httpClient  *http.Client
-	accessToken string
-	tokenExpiry time.Time
-	mu          sync.Mutex
+	config *FCMConfig
+	client *messaging.Client
+	app    *firebase.App
+	mu     sync.Mutex
 }
 
 func NewFCMNotifier(config *FCMConfig) *FCMNotifier {
-	return &FCMNotifier{
+	notifier := &FCMNotifier{
 		config: config,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
+
+	credFile := config.CredentialsFile
+	if credFile == "" {
+		credFile = os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	}
+
+	var opts []option.ClientOption
+	if credFile != "" {
+		opts = append(opts, option.WithCredentialsFile(credFile))
+	}
+
+	ctx := context.Background()
+	app, err := firebase.NewApp(ctx, nil, opts...)
+	if err != nil {
+		log.Printf("Failed to initialize Firebase app: %v", err)
+		return notifier
+	}
+
+	client, err := app.Messaging(ctx)
+	if err != nil {
+		log.Printf("Failed to create FCM client: %v", err)
+		return notifier
+	}
+
+	notifier.app = app
+	notifier.client = client
+	log.Println("FCM notifier initialized successfully")
+	return notifier
 }
 
 func (f *FCMNotifier) SendPushNotification(token, title, body string, data map[string]string) error {
@@ -65,209 +66,29 @@ func (f *FCMNotifier) SendPushNotification(token, title, body string, data map[s
 		return nil
 	}
 
-	if err := f.ensureAccessToken(); err != nil {
-		return fmt.Errorf("failed to get access token: %w", err)
+	if f.client == nil {
+		return fmt.Errorf("FCM client not initialized")
 	}
 
-	payload := FCMNotificationPayload{}
-	payload.Message.Token = token
-	payload.Message.Notification.Title = title
-	payload.Message.Notification.Body = body
-	if len(data) > 0 {
-		payload.Message.Data = data
+	ctx := context.Background()
+
+	message := &messaging.Message{
+		Token: token,
+		Notification: &messaging.Notification{
+			Title: title,
+			Body:  body,
+		},
+		Data: data,
 	}
 
-	payloadBytes, err := json.Marshal(payload)
+	_, err := f.client.Send(ctx, message)
 	if err != nil {
-		return fmt.Errorf("failed to marshal FCM payload: %w", err)
+		log.Printf("FCM send error: %v", err)
+		return fmt.Errorf("failed to send FCM message: %w", err)
 	}
 
-	url := fmt.Sprintf("https://fcm.googleapis.com/v1/projects/%s/messages:send", f.config.ProjectID)
-	req, err := http.NewRequest("POST", url, strings.NewReader(string(payloadBytes)))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+f.accessToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := f.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send FCM request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		log.Printf("FCM error response: %s", string(respBody))
-		return fmt.Errorf("FCM returned status %d", resp.StatusCode)
-	}
-
-	log.Printf("FCM notification sent successfully to token: %s...", token[:min(20, len(token))])
+	log.Printf("FCM notification sent successfully to token: %s...", truncate(token, 20))
 	return nil
-}
-
-func (f *FCMNotifier) ensureAccessToken() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if f.accessToken != "" && time.Now().Before(f.tokenExpiry) {
-		return nil
-	}
-
-	accessToken, err := f.getAccessTokenFromCredentials()
-	if err != nil {
-		return err
-	}
-
-	f.accessToken = accessToken
-	f.tokenExpiry = time.Now().Add(55 * time.Minute) // Refresh before 1 hour expiry
-	return nil
-}
-
-func (f *FCMNotifier) getAccessTokenFromCredentials() (string, error) {
-	credentialsFile := f.config.CredentialsFile
-	if credentialsFile == "" {
-		credentialsFile = os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	}
-
-	if credentialsFile != "" {
-		return f.getAccessTokenFromFile(credentialsFile)
-	}
-
-	return f.getAccessTokenFromMetadata()
-}
-
-func (f *FCMNotifier) getAccessTokenFromFile(path string) (string, error) {
-	type ServiceAccount struct {
-		Type         string `json:"type"`
-		ProjectID    string `json:"project_id"`
-		PrivateKeyID string `json:"private_key_id"`
-		PrivateKey   string `json:"private_key"`
-		ClientEmail  string `json:"client_email"`
-		ClientID     string `json:"client_id"`
-		AuthURI      string `json:"auth_uri"`
-		TokenURI     string `json:"token_uri"`
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to read credentials file: %w", err)
-	}
-
-	var creds ServiceAccount
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return "", fmt.Errorf("failed to parse credentials: %w", err)
-	}
-
-	// Parse private key
-	privateKeyBytes := []byte(creds.PrivateKey)
-
-	// Try to decode from base64 if it's base64 encoded
-	keyDecoded, err := base64.RawURLEncoding.DecodeString(creds.PrivateKey)
-	if err == nil {
-		privateKeyBytes = keyDecoded
-	}
-
-	// Parse as PKCS1 or PKCS8
-	var privateKey *rsa.PrivateKey
-	if key, err := x509.ParsePKCS1PrivateKey(privateKeyBytes); err == nil {
-		privateKey = key
-	} else if key, err := x509.ParsePKCS8PrivateKey(privateKeyBytes); err == nil {
-		privateKey = key.(*rsa.PrivateKey)
-	} else {
-		log.Printf("Failed to parse private key: %v", err)
-		return "", fmt.Errorf("failed to parse private key: %w", err)
-	}
-
-	// Create JWT header and payload
-	header := `{"alg":"RS256","typ":"JWT"}`
-	now := time.Now()
-	payload := fmt.Sprintf(`{
-		"iss":"%s",
-		"sub":"%s",
-		"aud":"https://oauth2.googleapis.com",
-		"iat":%d,
-		"exp":%d
-	}`, creds.ClientEmail, creds.ClientEmail, now.Unix(), now.Add(3600).Unix())
-
-	headerEncoded := base64.RawURLEncoding.EncodeToString([]byte(header))
-	payloadEncoded := base64.RawURLEncoding.EncodeToString([]byte(payload))
-	signingInput := headerEncoded + "." + payloadEncoded
-
-	// Sign the JWT
-	hash := sha256.Sum256([]byte(signingInput))
-	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
-	if err != nil {
-		return "", fmt.Errorf("failed to sign JWT: %w", err)
-	}
-
-	jwtAssertion := signingInput + "." + base64.RawURLEncoding.EncodeToString(signature)
-
-	// Exchange JWT for access token
-	tokenURL := creds.TokenURI
-	if tokenURL == "" {
-		tokenURL = "https://oauth2.googleapis.com/token"
-	}
-
-	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(
-		"grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion="+jwtAssertion))
-	if err != nil {
-		return "", fmt.Errorf("failed to create token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := f.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to exchange JWT for token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("Token exchange response: %s", string(body))
-		return "", fmt.Errorf("token exchange failed with status %d", resp.StatusCode)
-	}
-
-	var tokenResp struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf("failed to decode token response: %w", err)
-	}
-
-	log.Printf("Successfully obtained FCM access token")
-	return tokenResp.AccessToken, nil
-}
-
-func (f *FCMNotifier) getAccessTokenFromMetadata() (string, error) {
-	req, err := http.NewRequest("GET", "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token", nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create metadata request: %w", err)
-	}
-	req.Header.Set("Metadata-Flavor", "Google")
-
-	resp, err := f.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to get metadata token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("metadata service returned status %d", resp.StatusCode)
-	}
-
-	var tokenResp struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf("failed to decode token response: %w", err)
-	}
-
-	return tokenResp.AccessToken, nil
 }
 
 func (f *FCMNotifier) SendNotification(userID string, notif models.Notification) error {
@@ -285,11 +106,11 @@ func (f *FCMNotifier) Unsubscribe(userID string) error {
 	return nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
 	}
-	return b
+	return s[:maxLen]
 }
 
 type DeviceTokenStore interface {
