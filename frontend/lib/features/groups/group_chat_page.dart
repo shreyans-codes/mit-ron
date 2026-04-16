@@ -20,6 +20,7 @@ class GroupChatPage extends StatefulWidget {
 class _GroupChatPageState extends State<GroupChatPage>
     with SingleTickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   int _memberCount = 0;
   bool _isLoadingMembers = true;
   late Group _currentGroup;
@@ -50,6 +51,7 @@ class _GroupChatPageState extends State<GroupChatPage>
   void dispose() {
     _tabController.dispose();
     _messageController.dispose();
+    _scrollController.dispose();
     final chatId = widget.group.chatId ?? widget.group.id;
     NotificationService.instance.realtimeService.unsubscribeFromGroupMessages(
       chatId,
@@ -102,11 +104,24 @@ class _GroupChatPageState extends State<GroupChatPage>
           _messages = messages;
           _isLoadingMessages = false;
         });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingMessages = false);
       }
+    }
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -425,6 +440,7 @@ class _GroupChatPageState extends State<GroupChatPage>
               : _messages.isEmpty
               ? const Center(child: Text('No messages yet'))
               : ListView.builder(
+                  controller: _scrollController,
                   padding: const EdgeInsets.all(16),
                   itemCount: _messages.length,
                   itemBuilder: (context, index) {
@@ -634,6 +650,7 @@ class _EventChatPage extends StatefulWidget {
 
 class _EventChatPageState extends State<_EventChatPage> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   List<Message> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
@@ -649,6 +666,7 @@ class _EventChatPageState extends State<_EventChatPage> {
   @override
   void dispose() {
     _messageController.dispose();
+    _scrollController.dispose();
     final chatId = widget.event.chatId ?? widget.event.id;
     NotificationService.instance.realtimeService.unsubscribeFromGroupMessages(
       chatId,
@@ -682,9 +700,22 @@ class _EventChatPageState extends State<_EventChatPage> {
           _messages = messages;
           _isLoading = false;
         });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -756,6 +787,7 @@ class _EventChatPageState extends State<_EventChatPage> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.all(16),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {

@@ -207,7 +207,26 @@ class _GroupListPageState extends State<GroupListPage> {
                           );
                         },
                       ),
-                      title: Text(group.name),
+                      title: Row(
+                        children: [
+                          if (group.unreadCount > 0)
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          Flexible(
+                            child: Text(
+                              group.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -228,21 +247,14 @@ class _GroupListPageState extends State<GroupListPage> {
                             ),
                         ],
                       ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text('${group.memberCount}'),
-                          if (group.unreadCount > 0)
-                            Container(
-                              margin: const EdgeInsets.only(top: 4),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
+                      trailing: group.unreadCount > 0
+                          ? Container(
+                              width: 24,
+                              height: 24,
+                              alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 color: Theme.of(context).colorScheme.primary,
-                                borderRadius: BorderRadius.circular(12),
+                                shape: BoxShape.circle,
                               ),
                               child: Text(
                                 group.unreadCount > 99
@@ -252,13 +264,12 @@ class _GroupListPageState extends State<GroupListPage> {
                                   color: Theme.of(
                                     context,
                                   ).colorScheme.onPrimary,
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
+                            )
+                          : null,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(

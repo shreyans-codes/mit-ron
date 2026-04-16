@@ -35,6 +35,7 @@ type Authenticator interface {
 	CreateMessage(chatID, senderID, content string, parentID, threadID *string, isThreadRoot bool) (*models.Message, error)
 	GetMessages(groupID string) ([]models.Message, error)
 	GetEventMessages(eventID string) ([]models.Message, error)
+	GetChatMessages(chatID string) ([]models.Message, error)
 	GetOrCreateGroupChat(groupID string) (string, error)
 	GetEventChatID(eventID string) (string, error)
 	MarkMessagesAsRead(chatID, userID, lastMessageID string) error

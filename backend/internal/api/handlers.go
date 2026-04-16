@@ -884,14 +884,18 @@ func (h *Handler) HandleGetMessages(c *gin.Context) {
 
 	groupID := c.Query("group_id")
 	eventID := c.Query("event_id")
+	chatIDParam := c.Query("chat_id")
 
-	if groupID == "" && eventID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id or event_id is required"})
+	if (groupID == "" && eventID == "" && chatIDParam == "") || (groupID != "" && chatIDParam != "") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id, event_id, or chat_id is required (but not both group_id and chat_id)"})
 		return
 	}
 
 	var chatID string
-	if eventID != "" {
+	if chatIDParam != "" {
+		// Direct chat ID provided
+		chatID = chatIDParam
+	} else if eventID != "" {
 		chatID, err = h.auth.GetEventChatID(eventID)
 	} else {
 		chatID, err = h.auth.GetOrCreateGroupChat(groupID)
@@ -912,7 +916,10 @@ func (h *Handler) HandleGetMessages(c *gin.Context) {
 	}
 
 	var messages []models.Message
-	if eventID != "" {
+	if chatIDParam != "" {
+		// Direct chat ID - fetch messages by chat ID
+		messages, err = h.auth.GetChatMessages(chatID)
+	} else if eventID != "" {
 		messages, err = h.auth.GetEventMessages(eventID)
 	} else {
 		messages, err = h.auth.GetMessages(groupID)

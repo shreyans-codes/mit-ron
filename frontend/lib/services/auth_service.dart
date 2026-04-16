@@ -387,13 +387,13 @@ class AuthService {
   }
 
   Future<List<Message>> getMessages(
-    String groupId, {
+    String chatId, {
     String? lastMessageId,
   }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
     var url =
-        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?group_id=$groupId';
+        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?chat_id=$chatId';
     if (lastMessageId != null) {
       url += '&last_message_id=$lastMessageId';
     }
@@ -413,13 +413,13 @@ class AuthService {
   }
 
   Future<List<Message>> getEventMessages(
-    String eventId, {
+    String chatId, {
     String? lastMessageId,
   }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
     var url =
-        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?event_id=$eventId';
+        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?chat_id=$chatId';
     if (lastMessageId != null) {
       url += '&last_message_id=$lastMessageId';
     }
@@ -996,6 +996,9 @@ class AuthService {
       createdAt: DateTime.parse(json['created_at']),
       memberCount: json['member_count'] as int? ?? 0,
       groupImageUrl: groupImageUrl,
+      chatId: json['chat_id'] as String?,
+      lastActivityAt: json['last_activity_at'] as String?,
+      unreadCount: json['unread_count'] as int? ?? 0,
     );
   }
 
@@ -1007,6 +1010,10 @@ class AuthService {
       'created_by': group.creatorId,
       'created_at': group.createdAt.toIso8601String(),
       'member_count': group.memberCount,
+      'group_image_url': group.groupImageUrl,
+      'chat_id': group.chatId,
+      'last_activity_at': group.lastActivityAt,
+      'unread_count': group.unreadCount,
     };
   }
 
