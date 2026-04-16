@@ -745,7 +745,11 @@ func (p *PostgresAuthenticator) CreateEvent(groupID, title, description, creator
 
 func (p *PostgresAuthenticator) GetEvents(groupID string) ([]models.Event, error) {
 	rows, err := p.pool.Query(context.Background(),
-		"SELECT id, group_id, title, COALESCE(description, ''), created_by, created_at, resolution_message_id FROM events WHERE group_id = $1 ORDER BY created_at DESC",
+		`SELECT e.id, e.group_id, e.title, COALESCE(e.description, ''), e.created_by, e.created_at, e.resolution_message_id, c.id 
+		 FROM events e 
+		 LEFT JOIN chats c ON c.event_id = e.id AND c.type = 'event'
+		 WHERE e.group_id = $1 
+		 ORDER BY e.created_at DESC`,
 		groupID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events: %v", err)
@@ -755,9 +759,13 @@ func (p *PostgresAuthenticator) GetEvents(groupID string) ([]models.Event, error
 	var events []models.Event
 	for rows.Next() {
 		var event models.Event
-		if err := rows.Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatedBy, &event.CreatedAt, &event.ResolutionMsgID); err != nil {
+		var chatID string
+		if err := rows.Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatedBy, &event.CreatedAt, &event.ResolutionMsgID, &chatID); err != nil {
 			log.Printf("Error scanning event row: %v", err)
 			continue
+		}
+		if chatID != "" {
+			event.ChatID = &chatID
 		}
 		events = append(events, event)
 	}
@@ -920,11 +928,24 @@ func (p *PostgresAuthenticator) DeleteEvent(eventID string) error {
 func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, error) {
 	query := `
 		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, 
-			(SELECT COUNT(*) FROM public.group_members WHERE group_id = g.id) AS member_count
+			(SELECT COUNT(*) FROM public.group_members WHERE group_id = g.id) AS member_count,
+			c.id,
+			COALESCE(c.last_activity_at, g.created_at) as last_activity,
+			COALESCE(
+				(SELECT COUNT(*) FROM messages m 
+				 WHERE m.chat_id = c.id AND m.sender_id != $1
+				 AND NOT EXISTS (
+				   SELECT 1 FROM message_read_status mrs 
+				   WHERE mrs.user_id = $1 AND mrs.chat_id = c.id 
+				   AND mrs.last_read_message_id >= m.id
+				 )
+				), 0
+			) as unread_count
 		FROM public.groups g
 		JOIN public.group_members gm ON g.id = gm.group_id
+		LEFT JOIN public.chats c ON c.group_id = g.id AND c.type = 'group'
 		WHERE gm.user_id = $1
-		ORDER BY g.created_at DESC
+		ORDER BY last_activity DESC
 	`
 	rows, err := p.pool.Query(context.Background(), query, userID)
 	if err != nil {
@@ -936,11 +957,22 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 	for rows.Next() {
 		var group models.Group
 		var memberCount int
-		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &memberCount); err != nil {
+		var chatID string
+		var lastActivity *time.Time
+		var unreadCount int
+		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &memberCount, &chatID, &lastActivity, &unreadCount); err != nil {
 			log.Printf("Error scanning group row: %v", err)
 			continue
 		}
 		group.MemberCount = memberCount
+		if chatID != "" {
+			group.ChatID = &chatID
+		}
+		if lastActivity != nil {
+			t := lastActivity.Format(time.RFC3339)
+			group.LastActivityAt = &t
+		}
+		group.UnreadCount = unreadCount
 		groups = append(groups, group)
 	}
 
@@ -1199,16 +1231,18 @@ func (p *PostgresAuthenticator) RemoveGroupMember(groupID, adminUserID, memberID
 
 func (p *PostgresAuthenticator) GetGroupByID(groupID string) (*models.Group, error) {
 	query := `
-		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count
+		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count, c.id, COALESCE(c.last_activity_at, g.created_at)
 		FROM public.groups g
 		LEFT JOIN public.group_members gm ON g.id = gm.group_id
+		LEFT JOIN public.chats c ON c.group_id = g.id AND c.type = 'group'
 		WHERE g.id = $1
-		GROUP BY g.id, g.name, g.description, g.created_by, g.created_at, g.group_image_url
+		GROUP BY g.id, g.name, g.description, g.created_by, g.created_at, g.group_image_url, c.id
 	`
 	row := p.pool.QueryRow(context.Background(), query, groupID)
 	var group models.Group
-	var groupImageURL string
-	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &groupImageURL, &group.MemberCount)
+	var groupImageURL, chatID string
+	var lastActivity *time.Time
+	err := row.Scan(&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &groupImageURL, &group.MemberCount, &chatID, &lastActivity)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("group not found")
@@ -1217,6 +1251,13 @@ func (p *PostgresAuthenticator) GetGroupByID(groupID string) (*models.Group, err
 	}
 	if groupImageURL != "" {
 		group.GroupImageURL = &groupImageURL
+	}
+	if chatID != "" {
+		group.ChatID = &chatID
+	}
+	if lastActivity != nil {
+		t := lastActivity.Format(time.RFC3339)
+		group.LastActivityAt = &t
 	}
 	return &group, nil
 }
@@ -1357,6 +1398,24 @@ func stringValue(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func (p *PostgresAuthenticator) MarkMessagesAsRead(chatID, userID, lastMessageID string) error {
+	_, err := p.pool.Exec(context.Background(),
+		`INSERT INTO message_read_status (user_id, chat_id, last_read_message_id, last_read_at)
+		 VALUES ($1, $2, $3, NOW())
+		 ON CONFLICT (user_id, chat_id) DO UPDATE SET
+			last_read_message_id = EXCLUDED.last_read_message_id,
+			last_read_at = NOW()`,
+		userID, chatID, lastMessageID)
+	return err
+}
+
+func (p *PostgresAuthenticator) UpdateChatActivity(chatID string) error {
+	_, err := p.pool.Exec(context.Background(),
+		`UPDATE chats SET last_activity_at = NOW() WHERE id = $1`,
+		chatID)
+	return err
 }
 
 func (p *PostgresAuthenticator) CreateMessage(chatID, senderID, content string, parentID, threadID *string, isThreadRoot bool) (*models.Message, error) {

@@ -15,6 +15,7 @@ import '../settings/settings_page.dart';
 import '../users/profile/user_profile_page.dart';
 import '../users/search/user_search_page.dart';
 import '../notifications/notifications_page.dart';
+import '../onboarding/onboarding_page.dart';
 
 class PlaceholderHomePage extends StatefulWidget {
   const PlaceholderHomePage({super.key, this.session});
@@ -29,6 +30,7 @@ class PlaceholderHomePage extends StatefulWidget {
 
 class _PlaceholderHomePageState extends State<PlaceholderHomePage> {
   int _unreadCount = 0;
+  bool _checkedOnboarding = false;
 
   @override
   void initState() {
@@ -40,6 +42,23 @@ class _PlaceholderHomePageState extends State<PlaceholderHomePage> {
   }
 
   Future<void> _initializeNotifications() async {
+    // Check onboarding status after a brief delay to let the page build
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final hasOnboarded = await NotificationService.instance
+          .hasCompletedOnboarding();
+      if (hasOnboarded) {
+        setState(() => _checkedOnboarding = true);
+        await _loadRealtimeData();
+      } else {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed(OnboardingPage.routeName);
+        }
+      }
+    });
+  }
+
+  Future<void> _loadRealtimeData() async {
     await NotificationService.instance.getUnreadCount();
     final user = AuthService.instance.currentUser;
     if (user != null) {

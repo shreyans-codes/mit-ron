@@ -814,6 +814,11 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 		return
 	}
 
+	// Update chat activity timestamp
+	go func() {
+		_ = h.auth.UpdateChatActivity(chatID)
+	}()
+
 	if h.notification != nil {
 		go func() {
 			var targetGroupID string
@@ -871,7 +876,7 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 
 func (h *Handler) HandleGetMessages(c *gin.Context) {
 	token := c.GetString("token")
-	_, err := h.getUserIDFromToken(token)
+	userID, err := h.getUserIDFromToken(token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -883,6 +888,27 @@ func (h *Handler) HandleGetMessages(c *gin.Context) {
 	if groupID == "" && eventID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id or event_id is required"})
 		return
+	}
+
+	var chatID string
+	if eventID != "" {
+		chatID, err = h.auth.GetEventChatID(eventID)
+	} else {
+		chatID, err = h.auth.GetOrCreateGroupChat(groupID)
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chat"})
+		return
+	}
+
+	// Mark messages as read when user fetches them
+	if chatID != "" && userID != "" {
+		lastMsgID := c.Query("last_message_id")
+		if lastMsgID != "" {
+			go func() {
+				_ = h.auth.MarkMessagesAsRead(chatID, userID, lastMsgID)
+			}()
+		}
 	}
 
 	var messages []models.Message

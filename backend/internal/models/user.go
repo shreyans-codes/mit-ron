@@ -47,13 +47,16 @@ type PendingFriendProfile struct {
 }
 
 type Group struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Description   *string   `json:"description,omitempty"`
-	CreatedBy     *string   `json:"created_by"`
-	CreatedAt     time.Time `json:"created_at"`
-	MemberCount   int       `json:"member_count"`
-	GroupImageURL *string   `json:"group_image_url,omitempty"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Description    *string   `json:"description,omitempty"`
+	CreatedBy      *string   `json:"created_by"`
+	CreatedAt      time.Time `json:"created_at"`
+	MemberCount    int       `json:"member_count"`
+	GroupImageURL  *string   `json:"group_image_url,omitempty"`
+	ChatID         *string   `json:"chat_id,omitempty"`
+	LastActivityAt *string   `json:"last_activity_at,omitempty"`
+	UnreadCount    int       `json:"unread_count,omitempty"`
 }
 
 type GroupMember struct {

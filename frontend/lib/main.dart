@@ -16,6 +16,7 @@ import 'features/groups/group_chat_page.dart'; // Import GroupChatPage
 import 'features/groups/group_list_page.dart'; // Import GroupListPage
 import 'features/groups/join_group_page.dart'; // Import JoinGroupPage
 import 'features/settings/settings_page.dart';
+import 'features/onboarding/onboarding_page.dart';
 import 'models/group.dart';
 import 'features/settings/update_profile_page.dart';
 import 'features/users/profile/user_profile_page.dart'; // Import UserProfilePage
@@ -85,12 +86,22 @@ class MitronApp extends StatelessWidget {
             initialRoute: isAuthenticated
                 ? PlaceholderHomePage.routeName
                 : LoginPage.routeName,
+            onGenerateRoute: (settings) {
+              // Handle onboarding route
+              if (settings.name == OnboardingPage.routeName) {
+                return MaterialPageRoute(
+                  builder: (_) => const OnboardingPage(),
+                );
+              }
+              return null;
+            },
             routes: {
               LoginPage.routeName: (_) => const LoginPage(),
               SignUpPage.routeName: (_) => const SignUpPage(),
               SettingsPage.routeName: (_) => const SettingsPage(),
               UpdateProfilePage.routeName: (_) => const UpdateProfilePage(),
               PlaceholderHomePage.routeName: (_) => const PlaceholderHomePage(),
+              OnboardingPage.routeName: (_) => const OnboardingPage(),
               UserSearchPage.routeName: (_) => const UserSearchPage(),
               UserProfilePage.routeName: (context) {
                 final args = ModalRoute.of(context)!.settings.arguments;

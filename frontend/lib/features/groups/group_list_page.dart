@@ -109,6 +109,20 @@ class _GroupListPageState extends State<GroupListPage> {
     }
   }
 
+  String _formatLastActivity(String timestamp) {
+    try {
+      final dt = DateTime.parse(timestamp);
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inDays > 0) return '${diff.inDays}d ago';
+      if (diff.inHours > 0) return '${diff.inHours}h ago';
+      if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+      return 'now';
+    } catch (_) {
+      return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -194,10 +208,57 @@ class _GroupListPageState extends State<GroupListPage> {
                         },
                       ),
                       title: Text(group.name),
-                      subtitle: Text(
-                        group.description ?? 'No description provided.',
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            group.description ?? 'No description provided.',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (group.lastActivityAt != null)
+                            Text(
+                              _formatLastActivity(group.lastActivityAt!),
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                            ),
+                        ],
                       ),
-                      trailing: Text('Members: ${group.memberCount}'),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('${group.memberCount}'),
+                          if (group.unreadCount > 0)
+                            Container(
+                              margin: const EdgeInsets.only(top: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                group.unreadCount > 99
+                                    ? '99+'
+                                    : '${group.unreadCount}',
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(

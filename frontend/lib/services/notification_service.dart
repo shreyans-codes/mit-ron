@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification.dart';
 import '../core/constants/api_constants.dart';
 import '../services/auth_service.dart';
@@ -12,16 +13,31 @@ class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
 
+  static const String _notificationsEnabledKey = 'notifications_enabled';
+  static const String _firstLaunchKey = 'has_completed_onboarding';
+
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   RealtimeService _realtimeService = NoOpRealtimeService();
   final List<AppNotification> _notifications = [];
   int _unreadCount = 0;
   Function(int)? _onUnreadCountChanged;
+  bool _notificationsEnabled = false;
 
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
   int get unreadCount => _unreadCount;
   RealtimeService get realtimeService => _realtimeService;
+  bool get notificationsEnabled => _notificationsEnabled;
+
+  Future<bool> hasCompletedOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_firstLaunchKey) ?? false;
+  }
+
+  Future<void> setOnboardingComplete() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_firstLaunchKey, true);
+  }
 
   void setUnreadCountListener(Function(int) listener) {
     _onUnreadCountChanged = listener;
@@ -45,6 +61,58 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
+
+    // Load saved preference
+    final prefs = await SharedPreferences.getInstance();
+    _notificationsEnabled = prefs.getBool(_notificationsEnabledKey) ?? false;
+  }
+
+  Future<bool> requestNotificationPermission() async {
+    if (ApiConstants.fcmProjectId.isEmpty) {
+      // If no FCM configured, just track user preference
+      _notificationsEnabled = true;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_notificationsEnabledKey, true);
+      return true;
+    }
+
+    try {
+      final settings = await FirebaseMessaging.instance.requestPermission();
+      final granted =
+          settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+
+      _notificationsEnabled = granted;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_notificationsEnabledKey, granted);
+
+      if (granted) {
+        await registerFcmTokenIfLoggedIn();
+      }
+
+      return granted;
+    } catch (e) {
+      debugPrint('Failed to request notification permission: $e');
+      return false;
+    }
+  }
+
+  Future<void> loadNotificationPermissionStatus() async {
+    if (ApiConstants.fcmProjectId.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      _notificationsEnabled = prefs.getBool(_notificationsEnabledKey) ?? false;
+      return;
+    }
+
+    try {
+      final settings = await FirebaseMessaging.instance
+          .getNotificationSettings();
+      _notificationsEnabled =
+          settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+    } catch (e) {
+      debugPrint('Failed to get notification settings: $e');
+    }
   }
 
   Future<void> registerFcmTokenIfLoggedIn() async {

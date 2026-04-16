@@ -37,6 +37,8 @@ type Authenticator interface {
 	GetEventMessages(eventID string) ([]models.Message, error)
 	GetOrCreateGroupChat(groupID string) (string, error)
 	GetEventChatID(eventID string) (string, error)
+	MarkMessagesAsRead(chatID, userID, lastMessageID string) error
+	UpdateChatActivity(chatID string) error
 	CreateEvent(groupID, title, description, creatorID string) (*models.Event, error)
 	GetEvents(groupID string) ([]models.Event, error)
 	ResolveEvent(eventID, messageID string) error

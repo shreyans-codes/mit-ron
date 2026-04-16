@@ -7,6 +7,9 @@ class Group {
   final DateTime createdAt;
   final int memberCount;
   final String? groupImageUrl;
+  final String? chatId;
+  final String? lastActivityAt;
+  final int unreadCount;
 
   Group({
     required this.id,
@@ -16,6 +19,9 @@ class Group {
     required this.createdAt,
     this.memberCount = 0,
     this.groupImageUrl,
+    this.chatId,
+    this.lastActivityAt,
+    this.unreadCount = 0,
   });
 
   factory Group.fromJson(Map<String, dynamic> json) {
@@ -27,6 +33,9 @@ class Group {
       createdAt: DateTime.parse(json['created_at']),
       memberCount: json['member_count'] ?? 0,
       groupImageUrl: json['group_image_url'],
+      chatId: json['chat_id'],
+      lastActivityAt: json['last_activity_at'],
+      unreadCount: json['unread_count'] ?? 0,
     );
   }
 
@@ -39,6 +48,9 @@ class Group {
       'created_at': createdAt.toIso8601String(),
       'member_count': memberCount,
       'group_image_url': groupImageUrl,
+      'chat_id': chatId,
+      'last_activity_at': lastActivityAt,
+      'unread_count': unreadCount,
     };
   }
 }

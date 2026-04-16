@@ -386,13 +386,19 @@ class AuthService {
     }
   }
 
-  Future<List<Message>> getMessages(String groupId) async {
+  Future<List<Message>> getMessages(
+    String groupId, {
+    String? lastMessageId,
+  }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
+    var url =
+        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?group_id=$groupId';
+    if (lastMessageId != null) {
+      url += '&last_message_id=$lastMessageId';
+    }
     final response = await http.get(
-      Uri.parse(
-        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?group_id=$groupId',
-      ),
+      Uri.parse(url),
       headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
 
@@ -406,13 +412,19 @@ class AuthService {
     }
   }
 
-  Future<List<Message>> getEventMessages(String eventId) async {
+  Future<List<Message>> getEventMessages(
+    String eventId, {
+    String? lastMessageId,
+  }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
+    var url =
+        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?event_id=$eventId';
+    if (lastMessageId != null) {
+      url += '&last_message_id=$lastMessageId';
+    }
     final response = await http.get(
-      Uri.parse(
-        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?event_id=$eventId',
-      ),
+      Uri.parse(url),
       headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
 

@@ -3,6 +3,7 @@ import '../../models/group.dart';
 import '../../models/message.dart';
 import '../../models/event.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/mitron_button.dart';
 import 'group_details_page.dart';
 
@@ -41,13 +42,32 @@ class _GroupChatPageState extends State<GroupChatPage>
     _loadGroupDetail();
     _loadMessages();
     _loadEvents();
+    final chatId = widget.group.chatId ?? widget.group.id;
+    _subscribeToRealtimeMessages(chatId);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     _messageController.dispose();
+    final chatId = widget.group.chatId ?? widget.group.id;
+    NotificationService.instance.realtimeService.unsubscribeFromGroupMessages(
+      chatId,
+    );
     super.dispose();
+  }
+
+  void _subscribeToRealtimeMessages(String chatId) {
+    NotificationService.instance.realtimeService.subscribeToGroupMessages(
+      chatId,
+      (newMessage) {
+        if (mounted) {
+          setState(() {
+            _messages = [..._messages, newMessage];
+          });
+        }
+      },
+    );
   }
 
   Future<void> _loadGroupDetail() async {
@@ -71,7 +91,12 @@ class _GroupChatPageState extends State<GroupChatPage>
 
   Future<void> _loadMessages() async {
     try {
-      final messages = await AuthService.instance.getMessages(widget.group.id);
+      final chatId = widget.group.chatId ?? widget.group.id;
+      final lastMsgId = _messages.isNotEmpty ? _messages.last.id : null;
+      final messages = await AuthService.instance.getMessages(
+        chatId,
+        lastMessageId: lastMsgId,
+      );
       if (mounted) {
         setState(() {
           _messages = messages;
@@ -617,12 +642,40 @@ class _EventChatPageState extends State<_EventChatPage> {
   void initState() {
     super.initState();
     _loadMessages();
+    final chatId = widget.event.chatId ?? widget.event.id;
+    _subscribeToRealtimeMessages(chatId);
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    final chatId = widget.event.chatId ?? widget.event.id;
+    NotificationService.instance.realtimeService.unsubscribeFromGroupMessages(
+      chatId,
+    );
+    super.dispose();
+  }
+
+  void _subscribeToRealtimeMessages(String chatId) {
+    NotificationService.instance.realtimeService.subscribeToGroupMessages(
+      chatId,
+      (newMessage) {
+        if (mounted) {
+          setState(() {
+            _messages = [..._messages, newMessage];
+          });
+        }
+      },
+    );
   }
 
   Future<void> _loadMessages() async {
     try {
+      final chatId = widget.event.chatId ?? widget.event.id;
+      final lastMsgId = _messages.isNotEmpty ? _messages.last.id : null;
       final messages = await AuthService.instance.getEventMessages(
-        widget.event.id,
+        chatId,
+        lastMessageId: lastMsgId,
       );
       if (mounted) {
         setState(() {

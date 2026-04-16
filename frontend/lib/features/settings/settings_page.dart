@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/mitron_colors.dart';
 import '../../models/auth_user.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/theme_picker_button.dart';
 import '../auth/login_page.dart';
 import 'update_profile_page.dart';
@@ -18,11 +19,28 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late AuthUser _user;
+  bool _notificationsEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _user = AuthService.instance.currentUser!;
+    _checkNotificationStatus();
+  }
+
+  Future<void> _checkNotificationStatus() async {
+    await NotificationService.instance.loadNotificationPermissionStatus();
+    if (mounted) {
+      setState(() {
+        _notificationsEnabled =
+            NotificationService.instance.notificationsEnabled;
+      });
+    }
+  }
+
+  Future<void> _enableNotifications() async {
+    await NotificationService.instance.requestNotificationPermission();
+    await _checkNotificationStatus();
   }
 
   Future<void> _logout() async {
@@ -47,10 +65,9 @@ class _SettingsPageState extends State<SettingsPage> {
     if (confirmed == true && mounted) {
       await AuthService.instance.logout();
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          LoginPage.routeName,
-          (route) => false,
-        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(LoginPage.routeName, (route) => false);
       }
     }
   }
@@ -60,28 +77,65 @@ class _SettingsPageState extends State<SettingsPage> {
     final mc = MitronColors.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 12),
         children: [
+          _SectionHeader(title: 'Notifications', mc: mc),
+          ListTile(
+            onTap: _notificationsEnabled ? null : _enableNotifications,
+            leading: Icon(
+              _notificationsEnabled
+                  ? Icons.notifications_active_rounded
+                  : Icons.notifications_off_rounded,
+              color: _notificationsEnabled ? null : Colors.orange,
+            ),
+            title: const Text('Push Notifications'),
+            subtitle: Text(
+              _notificationsEnabled
+                  ? 'Enabled - You\'ll receive push notifications'
+                  : 'Not enabled - Tap to enable',
+            ),
+            trailing: _notificationsEnabled
+                ? null
+                : Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'Enable',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+          ),
+          const Divider(height: 32),
           _SectionHeader(title: 'Appearance', mc: mc),
           ListTile(
             onTap: () => ThemePickerButton.openThemePicker(context),
             leading: const Icon(Icons.palette_outlined),
             title: const Text('Change Theme'),
-            subtitle: const Text('Switch between light, dark, and acadamia themes'),
+            subtitle: const Text(
+              'Switch between light, dark, and acadamia themes',
+            ),
             trailing: const Icon(Icons.chevron_right_rounded),
           ),
           const Divider(height: 32),
           _SectionHeader(title: 'Account', mc: mc),
           ListTile(
             onTap: () async {
-              final updatedUser = await Navigator.of(context).pushNamed(
-                UpdateProfilePage.routeName,
-              );
-              
+              final updatedUser = await Navigator.of(
+                context,
+              ).pushNamed(UpdateProfilePage.routeName);
+
               if (updatedUser != null && updatedUser is AuthUser && mounted) {
                 setState(() {
                   _user = updatedUser;
@@ -90,7 +144,9 @@ class _SettingsPageState extends State<SettingsPage> {
             },
             leading: const Icon(Icons.person_outline_rounded),
             title: const Text('Update Profile'),
-            subtitle: Text('@${_user.username} · Change name and profile picture'),
+            subtitle: Text(
+              '@${_user.username} · Change name and profile picture',
+            ),
             trailing: const Icon(Icons.chevron_right_rounded),
           ),
           const Divider(height: 32),
@@ -122,10 +178,10 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         title.toUpperCase(),
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: mc.textMuted,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
-            ),
+          color: mc.textMuted,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
+        ),
       ),
     );
   }
