@@ -1363,8 +1363,11 @@ func (p *PostgresAuthenticator) checkFriendshipStatus(userID, otherUserID string
 
 func (p *PostgresAuthenticator) generateToken(userID string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": userID,
+		"sub":     userID,
+		"role":    "authenticated",
+		"iat":     time.Now().Unix(),
 		"exp":     time.Now().Add(time.Hour * 72).Unix(),
+		"user_id": userID,
 	})
 
 	return token.SignedString(p.jwtSecret)
