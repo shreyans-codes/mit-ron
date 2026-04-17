@@ -42,6 +42,7 @@ class ApiConstants {
   // Message Endpoints
   static const String sendMessage = '/messages/send';
   static const String getMessages = '/messages';
+  static const String markMessagesRead = '/messages/read';
 
   // Event Endpoints
   static const String createEvent = '/events/create';

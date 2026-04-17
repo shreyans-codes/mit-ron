@@ -127,6 +127,7 @@ func main() {
 
 		protected.POST("/messages/send", handler.HandleSendMessage)
 		protected.GET("/messages", handler.HandleGetMessages)
+		protected.POST("/messages/read", handler.HandleMarkMessagesRead)
 
 		protected.POST("/events/create", handler.HandleCreateEvent)
 		protected.GET("/events", handler.HandleGetEvents)

@@ -438,6 +438,26 @@ class AuthService {
     }
   }
 
+  Future<void> markMessagesAsRead(String chatId, String lastMessageId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.markMessagesRead}'),
+      headers: {
+        'Authorization': 'Bearer ${_token!.trim()}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'chat_id': chatId, 'last_message_id': lastMessageId}),
+    );
+
+    if (response.statusCode != 200) {
+      final error =
+          jsonDecode(response.body)['error'] ??
+          'Failed to mark messages as read';
+      throw AuthException(error);
+    }
+  }
+
   Future<Event> createEvent({
     required String groupId,
     required String title,

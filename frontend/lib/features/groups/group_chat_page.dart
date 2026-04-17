@@ -67,6 +67,9 @@ class _GroupChatPageState extends State<GroupChatPage>
           setState(() {
             _messages = [..._messages, newMessage];
           });
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom();
+          });
         }
       },
     );
@@ -94,16 +97,18 @@ class _GroupChatPageState extends State<GroupChatPage>
   Future<void> _loadMessages() async {
     try {
       final chatId = widget.group.chatId ?? widget.group.id;
-      final lastMsgId = _messages.isNotEmpty ? _messages.last.id : null;
-      final messages = await AuthService.instance.getMessages(
-        chatId,
-        lastMessageId: lastMsgId,
-      );
+      final messages = await AuthService.instance.getMessages(chatId);
       if (mounted) {
         setState(() {
           _messages = messages;
           _isLoadingMessages = false;
         });
+        if (messages.isNotEmpty) {
+          await AuthService.instance.markMessagesAsRead(
+            chatId,
+            messages.last.id,
+          );
+        }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _scrollToBottom();
         });
@@ -682,6 +687,9 @@ class _EventChatPageState extends State<_EventChatPage> {
           setState(() {
             _messages = [..._messages, newMessage];
           });
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom();
+          });
         }
       },
     );
@@ -690,16 +698,18 @@ class _EventChatPageState extends State<_EventChatPage> {
   Future<void> _loadMessages() async {
     try {
       final chatId = widget.event.chatId ?? widget.event.id;
-      final lastMsgId = _messages.isNotEmpty ? _messages.last.id : null;
-      final messages = await AuthService.instance.getEventMessages(
-        chatId,
-        lastMessageId: lastMsgId,
-      );
+      final messages = await AuthService.instance.getEventMessages(chatId);
       if (mounted) {
         setState(() {
           _messages = messages;
           _isLoading = false;
         });
+        if (messages.isNotEmpty) {
+          await AuthService.instance.markMessagesAsRead(
+            chatId,
+            messages.last.id,
+          );
+        }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _scrollToBottom();
         });

@@ -876,7 +876,7 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 
 func (h *Handler) HandleGetMessages(c *gin.Context) {
 	token := c.GetString("token")
-	userID, err := h.getUserIDFromToken(token)
+	_, err := h.getUserIDFromToken(token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -905,15 +905,8 @@ func (h *Handler) HandleGetMessages(c *gin.Context) {
 		return
 	}
 
-	// Mark messages as read when user fetches them
-	if chatID != "" && userID != "" {
-		lastMsgID := c.Query("last_message_id")
-		if lastMsgID != "" {
-			go func() {
-				_ = h.auth.MarkMessagesAsRead(chatID, userID, lastMsgID)
-			}()
-		}
-	}
+	// Don't automatically mark as read - user should explicitly do that
+	// when they leave the chat or tap "mark as read"
 
 	var messages []models.Message
 	if chatIDParam != "" {
@@ -930,6 +923,37 @@ func (h *Handler) HandleGetMessages(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, messages)
+}
+
+func (h *Handler) HandleMarkMessagesRead(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		ChatID        string `json:"chat_id"`
+		LastMessageID string `json:"last_message_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "chat_id and last_message_id are required"})
+		return
+	}
+
+	if req.ChatID == "" || req.LastMessageID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "chat_id and last_message_id are required"})
+		return
+	}
+
+	err = h.auth.MarkMessagesAsRead(req.ChatID, userID, req.LastMessageID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to mark messages as read: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Messages marked as read"})
 }
 
 func (h *Handler) HandleGetEvents(c *gin.Context) {
