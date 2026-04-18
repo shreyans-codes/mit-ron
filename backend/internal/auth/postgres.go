@@ -957,17 +957,17 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 	for rows.Next() {
 		var group models.Group
 		var memberCount int
-		var chatID string
+		var chatID *string // Make chatID nullable
 		var lastActivity *time.Time
 		var unreadCount int
-		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &memberCount, &chatID, &lastActivity, &unreadCount); err != nil {
+		var createdBy *string // Make createdBy nullable for scanning
+		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &createdBy, &group.CreatedAt, &memberCount, &chatID, &lastActivity, &unreadCount); err != nil {
 			log.Printf("Error scanning group row: %v", err)
 			continue
 		}
 		group.MemberCount = memberCount
-		if chatID != "" {
-			group.ChatID = &chatID
-		}
+		group.CreatedBy = createdBy
+		group.ChatID = chatID
 		if lastActivity != nil {
 			t := lastActivity.Format(time.RFC3339)
 			group.LastActivityAt = &t
@@ -1362,6 +1362,14 @@ func (p *PostgresAuthenticator) checkFriendshipStatus(userID, otherUserID string
 }
 
 func (p *PostgresAuthenticator) generateToken(userID string) (string, error) {
+	// Create a JWT with claims that Supabase's realtime can validate
+	// The key insight: Supabase validates the signature against its own JWT secret
+	// For this to work, we need to either:
+	// 1. Use a JWT secret that Supabase knows (not possible for external auth)
+	// 2. OR accept that realtime won't work with external JWTs directly
+	//
+	// Since RLS is disabled on all tables, we can skip auth for realtime
+	// The realtime will work if we don't set custom auth on the client
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":     userID,
 		"role":    "authenticated",
