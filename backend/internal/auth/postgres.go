@@ -248,8 +248,8 @@ func (p *PostgresAuthenticator) getUserByID(userID string) (*models.User, error)
 	log.Printf("Fetching user by ID: %s", userID)
 	var user models.User
 	query := `
-		SELECT id, email, username, display_name, avatar_url, bio, created_at 
-		FROM public.users 
+		SELECT id, email, username, display_name, avatar_url, bio, created_at
+		FROM public.users
 		WHERE id = $1
 	`
 	timeout := 10 * time.Second // Set a reasonable timeout for database operations
@@ -309,7 +309,7 @@ func (p *PostgresAuthenticator) SearchUsers(query string) ([]models.Profile, err
 		FROM public.users
 		WHERE LOWER(username) LIKE $1 OR LOWER(display_name) LIKE $1
 		ORDER BY username ASC
-		LIMIT 10 
+		LIMIT 10
 	`
 	timeout := 10 * time.Second // Set a reasonable timeout
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -745,10 +745,10 @@ func (p *PostgresAuthenticator) CreateEvent(groupID, title, description, creator
 
 func (p *PostgresAuthenticator) GetEvents(groupID string) ([]models.Event, error) {
 	rows, err := p.pool.Query(context.Background(),
-		`SELECT e.id, e.group_id, e.title, COALESCE(e.description, ''), e.created_by, e.created_at, e.resolution_message_id, c.id 
-		 FROM events e 
+		`SELECT e.id, e.group_id, e.title, COALESCE(e.description, ''), e.created_by, e.created_at, e.resolution_message_id, c.id
+		 FROM events e
 		 LEFT JOIN chats c ON c.event_id = e.id AND c.type = 'event'
-		 WHERE e.group_id = $1 
+		 WHERE e.group_id = $1
 		 ORDER BY e.created_at DESC`,
 		groupID)
 	if err != nil {
@@ -897,6 +897,12 @@ func (p *PostgresAuthenticator) DeleteEvent(eventID string) error {
 	}
 	defer tx.Rollback(context.Background())
 
+	_, err = tx.Exec(context.Background(),
+		"UPDATE events SET resolution_message_id = NULL WHERE id = $1", eventID)
+	if err != nil {
+		return fmt.Errorf("failed to clear resolution message: %v", err)
+	}
+
 	var chatID string
 	err = tx.QueryRow(context.Background(),
 		"SELECT id FROM chats WHERE event_id = $1", eventID).Scan(&chatID)
@@ -927,16 +933,16 @@ func (p *PostgresAuthenticator) DeleteEvent(eventID string) error {
 
 func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, error) {
 	query := `
-		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, 
+		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at,
 			(SELECT COUNT(*) FROM public.group_members WHERE group_id = g.id) AS member_count,
 			c.id,
 			COALESCE(c.last_activity_at, g.created_at) as last_activity,
 			COALESCE(
-				(SELECT COUNT(*) FROM messages m 
+				(SELECT COUNT(*) FROM messages m
 				 WHERE m.chat_id = c.id AND m.sender_id != $1
 				 AND NOT EXISTS (
-				   SELECT 1 FROM message_read_status mrs 
-				   WHERE mrs.user_id = $1 AND mrs.chat_id = c.id 
+				   SELECT 1 FROM message_read_status mrs
+				   WHERE mrs.user_id = $1 AND mrs.chat_id = c.id
 				   AND mrs.last_read_message_id >= m.id
 				 )
 				), 0
@@ -1087,13 +1093,19 @@ func (p *PostgresAuthenticator) DeleteGroup(groupID, userID string) error {
 	}
 	eventRows.Close()
 
-	if len(eventIDs) > 1 {
+	if len(eventIDs) > 0 {
 		placeholders := make([]string, len(eventIDs))
 		args := make([]interface{}, len(eventIDs))
 		for i, eid := range eventIDs {
 			placeholders[i] = fmt.Sprintf("$%d", i+1)
 			args[i] = eid
 		}
+
+		_, err = tx.Exec(ctx, fmt.Sprintf("UPDATE events SET resolution_message_id = NULL WHERE id IN (%s)", strings.Join(placeholders, ",")), args...)
+		if err != nil {
+			return fmt.Errorf("failed to clear resolution messages: %v", err)
+		}
+
 		chatRows, err := tx.Query(ctx, fmt.Sprintf("SELECT id FROM chats WHERE event_id IN (%s)", strings.Join(placeholders, ",")), args...)
 		if err != nil {
 			return fmt.Errorf("failed to get event chats: %v", err)
@@ -1231,7 +1243,7 @@ func (p *PostgresAuthenticator) RemoveGroupMember(groupID, adminUserID, memberID
 
 func (p *PostgresAuthenticator) GetGroupByID(groupID string) (*models.Group, error) {
 	query := `
-		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COUNT(gm.user_id) AS member_count, c.id, COALESCE(c.last_activity_at, g.created_at)
+		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at, COALESCE(g.group_image_url, ''), COALESCE(COUNT(gm.user_id), 0) AS member_count, COALESCE(c.id::text, ''), COALESCE(c.last_activity_at, g.created_at)
 		FROM public.groups g
 		LEFT JOIN public.group_members gm ON g.id = gm.group_id
 		LEFT JOIN public.chats c ON c.group_id = g.id AND c.type = 'group'
@@ -1444,7 +1456,7 @@ func (p *PostgresAuthenticator) CreateMessage(chatID, senderID, content string, 
 	}
 
 	err := p.pool.QueryRow(context.Background(),
-		`INSERT INTO public.messages (chat_id, sender_id, content, parent_message_id, thread_id, is_thread_root, type) 
+		`INSERT INTO public.messages (chat_id, sender_id, content, parent_message_id, thread_id, is_thread_root, type)
 		 VALUES ($1, $2, $3, $4, $5, $6, 'text') RETURNING id`,
 		chatID, senderID, content, parentIDPtr, threadIDPtr, isThreadRoot).Scan(&messageID)
 	if err != nil {

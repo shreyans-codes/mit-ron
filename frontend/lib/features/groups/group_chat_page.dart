@@ -60,13 +60,20 @@ class _GroupChatPageState extends State<GroupChatPage>
   }
 
   void _subscribeToRealtimeMessages(String chatId) {
+    print(
+      '[GroupChat] Subscribing to realtime messages for chat: $chatId (type: ${chatId.runtimeType})',
+    );
     NotificationService.instance.realtimeService.subscribeToGroupMessages(
       chatId,
       (newMessage) {
+        print(
+          '[GroupChat] Received new realtime message: ${newMessage.id} - ${newMessage.content}',
+        );
         if (mounted) {
           setState(() {
             _messages = [..._messages, newMessage];
           });
+          print('[GroupChat] Messages count after update: ${_messages.length}');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom();
           });
@@ -121,13 +128,21 @@ class _GroupChatPageState extends State<GroupChatPage>
   }
 
   void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+    print(
+      '[GroupChat] _scrollToBottom called, hasClients: ${_scrollController.hasClients}',
+    );
+    if (!_scrollController.hasClients) {
+      print('[GroupChat] ScrollController has no clients, scheduling retry');
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      return;
     }
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    print('[GroupChat] Scrolling to maxScrollExtent: $maxScroll');
+    _scrollController.animateTo(
+      maxScroll,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   Future<void> _loadEvents() async {
@@ -680,13 +695,18 @@ class _EventChatPageState extends State<_EventChatPage> {
   }
 
   void _subscribeToRealtimeMessages(String chatId) {
+    print('[EventChat] Subscribing to realtime messages for chat: $chatId');
     NotificationService.instance.realtimeService.subscribeToGroupMessages(
       chatId,
       (newMessage) {
+        print(
+          '[EventChat] Received new realtime message: ${newMessage.id} - ${newMessage.content}',
+        );
         if (mounted) {
           setState(() {
             _messages = [..._messages, newMessage];
           });
+          print('[EventChat] Messages count after update: ${_messages.length}');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom();
           });
@@ -720,13 +740,21 @@ class _EventChatPageState extends State<_EventChatPage> {
   }
 
   void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+    print(
+      '[EventChat] _scrollToBottom called, hasClients: ${_scrollController.hasClients}',
+    );
+    if (!_scrollController.hasClients) {
+      print('[EventChat] ScrollController has no clients, scheduling retry');
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      return;
     }
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    print('[EventChat] Scrolling to maxScrollExtent: $maxScroll');
+    _scrollController.animateTo(
+      maxScroll,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   Future<void> _sendMessage() async {

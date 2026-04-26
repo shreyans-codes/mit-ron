@@ -1,8 +1,12 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConstants {
-  static String get baseUrl =>
-      dotenv.env['API_BASE_URL'] ?? 'https://mit-ron.onrender.com';
+  static String get baseUrl {
+    if (dotenv.env['LOCAL'] == '1') {
+      return 'https://mit-ron.shreyanssethia.in';
+    }
+    return dotenv.env['API_BASE_URL'] ?? 'https://mit-ron.onrender.com';
+  }
 
   static String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
   static String get supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';

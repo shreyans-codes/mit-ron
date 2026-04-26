@@ -149,7 +149,14 @@ func main() {
 		port = "8080"
 	}
 
-	addr := "0.0.0.0:" + port
+	local := os.Getenv("LOCAL")
+	var addr string
+	if local == "1" {
+		addr = "localhost:" + port
+	} else {
+		addr = "0.0.0.0:" + port
+	}
+
 	log.Printf("Server starting on %s", addr)
 	r.Run(addr)
 }

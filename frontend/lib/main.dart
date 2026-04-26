@@ -53,14 +53,14 @@ Future<void> main() async {
     anonKey: ApiConstants.supabaseAnonKey,
   );
 
-  // Initialize Notification Service (local notifications only)
-  await NotificationService.instance.initialize();
-  NotificationService.instance.setRealtimeService(SupabaseRealtimeService());
-
   // Initialize services
   final themeController = await ThemeController.load();
   await AuthService.instance.init();
-  await CacheService.instance.init(); // Initialize CacheService
+  await CacheService.instance.init();
+
+  // Initialize Notification Service
+  await NotificationService.instance.initialize();
+  NotificationService.instance.setRealtimeService(SupabaseRealtimeService());
 
   runApp(MitronApp(themeController: themeController));
 }
