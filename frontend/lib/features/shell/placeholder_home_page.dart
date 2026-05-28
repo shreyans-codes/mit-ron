@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/mitron_colors.dart';
+import '../../core/utils/platform_image_provider.dart';
 import '../../models/auth_session.dart';
 import '../../services/auth_service.dart';
 import '../../services/cache_service.dart';
@@ -164,7 +164,7 @@ class _PlaceholderHomePageState extends State<PlaceholderHomePage> {
                       final avatarPath = snapshot.data;
                       if (avatarPath != null && avatarPath.isNotEmpty) {
                         return CircleAvatar(
-                          backgroundImage: FileImage(File(avatarPath)),
+                          backgroundImage: platformImageProvider(avatarPath),
                           radius: 30,
                         );
                       }

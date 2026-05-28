@@ -1,6 +1,6 @@
 // frontend/lib/features/users/profile/user_profile_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:mitron/core/utils/platform_image_provider.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
 import 'package:mitron/services/cache_service.dart';
@@ -164,7 +164,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         if (localPath != null && localPath.isNotEmpty) {
                           return CircleAvatar(
                             radius: 60,
-                            backgroundImage: FileImage(File(localPath)),
+                            backgroundImage: platformImageProvider(localPath),
                             child: null,
                           );
                         }

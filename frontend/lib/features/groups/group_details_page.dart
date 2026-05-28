@@ -1,12 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/utils/platform_image_provider.dart';
 import '../../models/group.dart';
 import '../../models/profile.dart';
-import '../../models/friend_lists.dart';
 import '../../services/auth_service.dart';
 import '../../services/cache_service.dart';
-import '../../models/group.dart' show Flair;
 import '../../widgets/mitron_button.dart';
 
 class GroupDetailsPage extends StatefulWidget {
@@ -31,7 +29,8 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
   bool _isLoading = true;
   String? _error;
   bool _isEditing = false;
-  String? _selectedAvatarPath;
+  XFile? _selectedAvatarFile;
+  String? _groupImageLocalPath;
   late Group _currentGroup;
 
   @override
@@ -41,9 +40,20 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
     _loadGroupData();
   }
 
+  Future<void> _loadGroupImageFromCache() async {
+    final localPath = await CacheService.instance.getGroupImageLocalPath(widget.group.id);
+    if (localPath != null && localPath.isNotEmpty && mounted) {
+      setState(() {
+        _groupImageLocalPath = localPath;
+      });
+    }
+  }
+
   Future<void> _loadGroupData() async {
     try {
-      await AuthService.instance.getGroupDetailWithCache(widget.group.id);
+      final group = await AuthService.instance.getGroupDetailWithCache(widget.group.id);
+      _currentGroup = group;
+      _loadGroupImageFromCache();
       final members = await AuthService.instance.getGroupMembers(
         widget.group.id,
       );
@@ -179,7 +189,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
     final picker = ImagePicker();
     final file = await picker.pickImage(source: ImageSource.gallery);
     if (file != null) {
-      setState(() => _selectedAvatarPath = file.path);
+      setState(() => _selectedAvatarFile = file);
     }
   }
 
@@ -202,7 +212,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                 GestureDetector(
                   onTap: () async {
                     await _pickAvatar();
-                    if (_selectedAvatarPath != null) {
+                    if (_selectedAvatarFile != null) {
                       setDialogState(() {});
                     }
                   },
@@ -213,14 +223,14 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                         backgroundColor: Theme.of(
                           context,
                         ).colorScheme.primaryContainer,
-                        backgroundImage: _selectedAvatarPath != null
-                            ? FileImage(File(_selectedAvatarPath!))
-                            : _currentGroup.groupImageUrl != null
-                            ? NetworkImage(_currentGroup.groupImageUrl!)
-                            : null,
+                        backgroundImage:
+                            platformImageProvider(_selectedAvatarFile?.path) ??
+                            platformImageProvider(_groupImageLocalPath) ??
+                            platformImageProvider(_currentGroup.groupImageUrl),
                         child:
-                            _selectedAvatarPath == null &&
-                                _currentGroup.groupImageUrl == null
+                            _selectedAvatarFile == null &&
+                                    _groupImageLocalPath == null &&
+                                    _currentGroup.groupImageUrl == null
                             ? Text(
                                 _currentGroup.name.isNotEmpty
                                     ? _currentGroup.name[0].toUpperCase()
@@ -302,12 +312,12 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
         _currentGroup.id,
         name: name,
         description: description,
-        avatarPath: _selectedAvatarPath,
+        avatarFile: _selectedAvatarFile,
       );
       if (mounted) {
         setState(() {
           _currentGroup = group;
-          _selectedAvatarPath = null;
+          _selectedAvatarFile = null;
         });
         widget.onMembersUpdated?.call();
         ScaffoldMessenger.of(
@@ -361,10 +371,10 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                   CircleAvatar(
                     radius: 50,
                     backgroundColor: theme.colorScheme.primaryContainer,
-                    backgroundImage: _currentGroup.groupImageUrl != null
-                        ? NetworkImage(_currentGroup.groupImageUrl!)
-                        : null,
-                    child: _currentGroup.groupImageUrl == null
+                    backgroundImage:
+                        platformImageProvider(_groupImageLocalPath) ??
+                        platformImageProvider(_currentGroup.groupImageUrl),
+                    child: _groupImageLocalPath == null && _currentGroup.groupImageUrl == null
                         ? Text(
                             _currentGroup.name.isNotEmpty
                                 ? _currentGroup.name[0].toUpperCase()
@@ -490,7 +500,7 @@ class _MemberTile extends StatelessWidget {
                 return CircleAvatar(
                   radius: 24,
                   backgroundColor: theme.colorScheme.primary,
-                  backgroundImage: FileImage(File(localPath)),
+                  backgroundImage: platformImageProvider(localPath),
                   child: null,
                 );
               }

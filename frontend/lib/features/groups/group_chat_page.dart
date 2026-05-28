@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../models/group.dart';
-import '../../models/message.dart';
 import '../../models/event.dart';
 import '../../services/auth_service.dart';
-import '../../services/notification_service.dart';
 import '../../widgets/mitron_button.dart';
 import 'group_details_page.dart';
+import 'shared_chat_view.dart';
 
 class GroupChatPage extends StatefulWidget {
   final Group group;
@@ -19,19 +18,16 @@ class GroupChatPage extends StatefulWidget {
 
 class _GroupChatPageState extends State<GroupChatPage>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
   int _memberCount = 0;
   bool _isLoadingMembers = true;
   late Group _currentGroup;
-  List<Message> _messages = [];
-  bool _isLoadingMessages = true;
   List<Event> _events = [];
   bool _isLoadingEvents = true;
   late TabController _tabController;
-  bool _isSending = false;
   String? _currentUserId;
   bool get _isCreator => _currentUserId == _currentGroup.creatorId;
+
+  String get _chatId => widget.group.chatId ?? widget.group.id;
 
   @override
   void initState() {
@@ -41,45 +37,13 @@ class _GroupChatPageState extends State<GroupChatPage>
     _currentUserId = AuthService.instance.currentUser?.id;
     _tabController = TabController(length: 2, vsync: this);
     _loadGroupDetail();
-    _loadMessages();
     _loadEvents();
-    final chatId = widget.group.chatId ?? widget.group.id;
-    _subscribeToRealtimeMessages(chatId);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _messageController.dispose();
-    _scrollController.dispose();
-    final chatId = widget.group.chatId ?? widget.group.id;
-    NotificationService.instance.realtimeService.unsubscribeFromGroupMessages(
-      chatId,
-    );
     super.dispose();
-  }
-
-  void _subscribeToRealtimeMessages(String chatId) {
-    print(
-      '[GroupChat] Subscribing to realtime messages for chat: $chatId (type: ${chatId.runtimeType})',
-    );
-    NotificationService.instance.realtimeService.subscribeToGroupMessages(
-      chatId,
-      (newMessage) {
-        print(
-          '[GroupChat] Received new realtime message: ${newMessage.id} - ${newMessage.content}',
-        );
-        if (mounted) {
-          setState(() {
-            _messages = [..._messages, newMessage];
-          });
-          print('[GroupChat] Messages count after update: ${_messages.length}');
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToBottom();
-          });
-        }
-      },
-    );
   }
 
   Future<void> _loadGroupDetail() async {
@@ -99,50 +63,6 @@ class _GroupChatPageState extends State<GroupChatPage>
         setState(() => _isLoadingMembers = false);
       }
     }
-  }
-
-  Future<void> _loadMessages() async {
-    try {
-      final chatId = widget.group.chatId ?? widget.group.id;
-      final messages = await AuthService.instance.getMessages(chatId);
-      if (mounted) {
-        setState(() {
-          _messages = messages;
-          _isLoadingMessages = false;
-        });
-        if (messages.isNotEmpty) {
-          await AuthService.instance.markMessagesAsRead(
-            chatId,
-            messages.last.id,
-          );
-        }
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToBottom();
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoadingMessages = false);
-      }
-    }
-  }
-
-  void _scrollToBottom() {
-    print(
-      '[GroupChat] _scrollToBottom called, hasClients: ${_scrollController.hasClients}',
-    );
-    if (!_scrollController.hasClients) {
-      print('[GroupChat] ScrollController has no clients, scheduling retry');
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-      return;
-    }
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    print('[GroupChat] Scrolling to maxScrollExtent: $maxScroll');
-    _scrollController.animateTo(
-      maxScroll,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
   }
 
   Future<void> _loadEvents() async {
@@ -293,34 +213,6 @@ class _GroupChatPageState extends State<GroupChatPage>
     }
   }
 
-  Future<void> _sendMessage() async {
-    final content = _messageController.text.trim();
-    if (content.isEmpty || _isSending) return;
-
-    setState(() => _isSending = true);
-
-    try {
-      final message = await AuthService.instance.sendMessage(
-        groupId: widget.group.id,
-        content: content,
-      );
-      if (mounted) {
-        setState(() {
-          _messages = [..._messages, message];
-          _messageController.clear();
-          _isSending = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSending = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
-      }
-    }
-  }
-
   void _showCreateEventDialog() {
     final titleController = TextEditingController();
     final descController = TextEditingController();
@@ -452,36 +344,9 @@ class _GroupChatPageState extends State<GroupChatPage>
   }
 
   Widget _buildChatTab() {
-    return Column(
-      children: [
-        Expanded(
-          child: _isLoadingMessages
-              ? const Center(child: CircularProgressIndicator())
-              : _messages.isEmpty
-              ? const Center(child: Text('No messages yet'))
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = _messages[index];
-                    final isMe =
-                        msg.senderId == AuthService.instance.currentUser?.id;
-                    return _MessageBubble(
-                      sender: isMe ? 'You' : msg.senderName ?? 'Unknown',
-                      text: msg.content,
-                      isMe: isMe,
-                      timestamp: msg.createdAt,
-                    );
-                  },
-                ),
-        ),
-        _MessageInput(
-          controller: _messageController,
-          onSend: _sendMessage,
-          isLoading: _isSending,
-        ),
-      ],
+    return ChatMessagesPanel(
+      chatId: _chatId,
+      groupId: widget.group.id,
     );
   }
 
@@ -669,126 +534,12 @@ class _EventChatPage extends StatefulWidget {
 }
 
 class _EventChatPageState extends State<_EventChatPage> {
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  List<Message> _messages = [];
-  bool _isLoading = true;
-  bool _isSending = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMessages();
-    final chatId = widget.event.chatId ?? widget.event.id;
-    _subscribeToRealtimeMessages(chatId);
-  }
-
-  @override
-  void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
-    final chatId = widget.event.chatId ?? widget.event.id;
-    NotificationService.instance.realtimeService.unsubscribeFromGroupMessages(
-      chatId,
-    );
-    super.dispose();
-  }
-
-  void _subscribeToRealtimeMessages(String chatId) {
-    print('[EventChat] Subscribing to realtime messages for chat: $chatId');
-    NotificationService.instance.realtimeService.subscribeToGroupMessages(
-      chatId,
-      (newMessage) {
-        print(
-          '[EventChat] Received new realtime message: ${newMessage.id} - ${newMessage.content}',
-        );
-        if (mounted) {
-          setState(() {
-            _messages = [..._messages, newMessage];
-          });
-          print('[EventChat] Messages count after update: ${_messages.length}');
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToBottom();
-          });
-        }
-      },
-    );
-  }
-
-  Future<void> _loadMessages() async {
-    try {
-      final chatId = widget.event.chatId ?? widget.event.id;
-      final messages = await AuthService.instance.getEventMessages(chatId);
-      if (mounted) {
-        setState(() {
-          _messages = messages;
-          _isLoading = false;
-        });
-        if (messages.isNotEmpty) {
-          await AuthService.instance.markMessagesAsRead(
-            chatId,
-            messages.last.id,
-          );
-        }
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToBottom();
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  void _scrollToBottom() {
-    print(
-      '[EventChat] _scrollToBottom called, hasClients: ${_scrollController.hasClients}',
-    );
-    if (!_scrollController.hasClients) {
-      print('[EventChat] ScrollController has no clients, scheduling retry');
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-      return;
-    }
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    print('[EventChat] Scrolling to maxScrollExtent: $maxScroll');
-    _scrollController.animateTo(
-      maxScroll,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-  }
-
-  Future<void> _sendMessage() async {
-    final content = _messageController.text.trim();
-    if (content.isEmpty || _isSending) return;
-
-    setState(() => _isSending = true);
-
-    try {
-      final message = await AuthService.instance.sendMessage(
-        groupId: widget.group.id,
-        content: content,
-        eventId: widget.event.id,
-      );
-      if (mounted) {
-        setState(() {
-          _messages = [..._messages, message];
-          _messageController.clear();
-          _isSending = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSending = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
-      }
-    }
-  }
+  final GlobalKey<ChatMessagesPanelState> _chatKey =
+      GlobalKey<ChatMessagesPanelState>();
 
   Future<void> _resolveEvent() async {
-    if (_messages.isEmpty) return;
-    final lastMsg = _messages.last;
+    final lastMsg = _chatKey.currentState?.lastMessage;
+    if (lastMsg == null) return;
     try {
       await AuthService.instance.resolveEvent(widget.event.id, lastMsg.id);
       if (mounted) {
@@ -819,181 +570,11 @@ class _EventChatPageState extends State<_EventChatPage> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = _messages[index];
-                      final isMe =
-                          msg.senderId == AuthService.instance.currentUser?.id;
-                      return _MessageBubble(
-                        sender: isMe ? 'You' : msg.senderName ?? 'Unknown',
-                        text: msg.content,
-                        isMe: isMe,
-                        timestamp: msg.createdAt,
-                      );
-                    },
-                  ),
-          ),
-          _MessageInput(
-            controller: _messageController,
-            onSend: _sendMessage,
-            isLoading: _isSending,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  final String sender;
-  final String text;
-  final bool isMe;
-  final DateTime timestamp;
-
-  const _MessageBubble({
-    required this.sender,
-    required this.text,
-    required this.isMe,
-    required this.timestamp,
-  });
-
-  String _formatTime(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inDays > 0) return '${diff.inDays}d';
-    if (diff.inHours > 0) return '${diff.inHours}h';
-    if (diff.inMinutes > 0) return '${diff.inMinutes}m';
-    return 'now';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: isMe
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
-        children: [
-          if (!isMe)
-            Padding(
-              padding: const EdgeInsets.only(left: 12, bottom: 2),
-              child: Text(
-                sender,
-                style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey),
-              ),
-            ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isMe
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(20),
-                topRight: const Radius.circular(20),
-                bottomLeft: Radius.circular(isMe ? 20 : 0),
-                bottomRight: Radius.circular(isMe ? 0 : 20),
-              ),
-            ),
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.75,
-            ),
-            child: Text(
-              text,
-              style: TextStyle(
-                color: isMe ? Colors.white : theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
-            child: Text(
-              _formatTime(timestamp),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: Colors.grey,
-                fontSize: 10,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MessageInput extends StatelessWidget {
-  final TextEditingController controller;
-  final VoidCallback onSend;
-  final bool isLoading;
-
-  const _MessageInput({
-    required this.controller,
-    required this.onSend,
-    required this.isLoading,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  hintText: 'Type a message...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                ),
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => onSend(),
-                enabled: !isLoading,
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: isLoading ? null : onSend,
-              icon: isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.send_rounded),
-            ),
-          ],
-        ),
+      body: ChatMessagesPanel(
+        key: _chatKey,
+        chatId: widget.event.chatId ?? widget.event.id,
+        groupId: widget.group.id,
+        eventId: widget.event.id,
       ),
     );
   }

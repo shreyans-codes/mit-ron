@@ -53,6 +53,32 @@ class Group {
       'unread_count': unreadCount,
     };
   }
+
+  Group copyWith({
+    String? id,
+    String? name,
+    String? description,
+    String? creatorId,
+    DateTime? createdAt,
+    int? memberCount,
+    String? groupImageUrl,
+    String? chatId,
+    String? lastActivityAt,
+    int? unreadCount,
+  }) {
+    return Group(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      creatorId: creatorId ?? this.creatorId,
+      createdAt: createdAt ?? this.createdAt,
+      memberCount: memberCount ?? this.memberCount,
+      groupImageUrl: groupImageUrl ?? this.groupImageUrl,
+      chatId: chatId ?? this.chatId,
+      lastActivityAt: lastActivityAt ?? this.lastActivityAt,
+      unreadCount: unreadCount ?? this.unreadCount,
+    );
+  }
 }
 
 class GroupMember {

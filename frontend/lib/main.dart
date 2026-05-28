@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:firebase_core/firebase_core.dart' show Firebase;
 
 import 'core/theme/app_theme_scope.dart';
 import 'core/theme/theme_controller.dart';
+import 'services/auth_service.dart';
 import 'core/constants/api_constants.dart';
 import 'features/auth/login_page.dart';
 import 'features/auth/signup_page.dart';
 import 'features/friends/friends_list_page.dart'; // Import FriendsListPage
 import 'features/groups/create_group_page.dart'; // Import CreateGroupPage
 import 'features/groups/group_details_page.dart'; // Import GroupDetailsPage
-import 'features/groups/group_chat_page.dart'; // Import GroupChatPage
 import 'features/groups/group_list_page.dart'; // Import GroupListPage
 import 'features/groups/join_group_page.dart'; // Import JoinGroupPage
 import 'features/settings/settings_page.dart';
@@ -22,11 +22,13 @@ import 'features/settings/update_profile_page.dart';
 import 'features/users/profile/user_profile_page.dart'; // Import UserProfilePage
 import 'features/users/search/user_search_page.dart'; // Import UserSearchPage
 import 'features/shell/placeholder_home_page.dart';
-import 'services/auth_service.dart';
+
 import 'services/cache_service.dart';
 import 'services/notification_service.dart';
 import 'services/realtime/supabase_realtime_service.dart';
 import 'features/notifications/notifications_page.dart'; // Import CacheService
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,6 +58,15 @@ Future<void> main() async {
   // Initialize services
   final themeController = await ThemeController.load();
   await AuthService.instance.init();
+
+  AuthService.instance.on401Redirect = () {
+    debugPrint('401 received, redirecting to login');
+    navigatorKey.currentState?.pushNamedAndRemoveUntil(
+      LoginPage.routeName,
+      (route) => false,
+    );
+  };
+
   await CacheService.instance.init();
 
   // Initialize Notification Service
@@ -80,9 +91,20 @@ class MitronApp extends StatelessWidget {
         listenable: themeController,
         builder: (_, _) {
           return MaterialApp(
+            navigatorKey: navigatorKey,
             title: 'Mitron',
             debugShowCheckedModeBanner: false,
             theme: themeController.themeData,
+            builder: (context, child) {
+              if (kIsWeb) {
+                final shortestSide = MediaQuery.sizeOf(context).shortestSide;
+                final isMobileWeb = shortestSide < 600;
+                if (!isMobileWeb) {
+                  return const _MobileWebOnlyScreen();
+                }
+              }
+              return child ?? const SizedBox.shrink();
+            },
             initialRoute: isAuthenticated
                 ? PlaceholderHomePage.routeName
                 : LoginPage.routeName,
@@ -137,6 +159,48 @@ class MitronApp extends StatelessWidget {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _MobileWebOnlyScreen extends StatelessWidget {
+  const _MobileWebOnlyScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.phone_iphone_rounded,
+                    size: 56,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Open Mitron on mobile web',
+                    style: Theme.of(context).textTheme.titleLarge,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'This web build shares the same mobile app UI and is available on phone-sized browsers only.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

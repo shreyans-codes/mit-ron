@@ -1,10 +1,9 @@
 // frontend/lib/services/cache_service.dart
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as developer;
+import 'cache/local_image_store.dart';
 
 class ImageCacheData {
   final String filePath;
@@ -70,23 +69,13 @@ class CacheService {
     await _prefs!.remove(key);
   }
 
-  Future<String> _getLocalImageDirectory() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final imageDir = Directory('${directory.path}/cached_images');
-    if (!await imageDir.exists()) {
-      await imageDir.create(recursive: true);
-    }
-    return imageDir.path;
-  }
-
-  Future<String> _saveImageToLocal(String userId, Uint8List imageBytes) async {
-    final dir = await _getLocalImageDirectory();
+  Future<String?> _saveImageToLocal(
+    String identifier,
+    Uint8List imageBytes,
+  ) async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = '${userId}_$timestamp.jpg';
-    final filePath = '$dir/$fileName';
-    final file = File(filePath);
-    await file.writeAsBytes(imageBytes);
-    return filePath;
+    final fileName = '${identifier}_$timestamp.jpg';
+    return saveImageBytesToLocal(fileName, imageBytes);
   }
 
   bool _isCacheValid(ImageCacheData? cacheData) {
@@ -107,7 +96,7 @@ class CacheService {
 
     final cacheData = ImageCacheData(
       filePath: filePath,
-      localPath: localPath,
+      localPath: localPath ?? filePath,
       cachedAt: DateTime.now(),
     );
 
@@ -159,17 +148,11 @@ class CacheService {
   ) async {
     developer.log('Caching image for group $groupId with file path: $filePath');
 
-    final dir = await _getLocalImageDirectory();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'group_${groupId}_$timestamp.jpg';
-    final localPath = '$dir/$fileName';
-
-    final file = File(localPath);
-    await file.writeAsBytes(imageBytes);
+    final localPath = await _saveImageToLocal('group_$groupId', imageBytes);
 
     final cacheData = ImageCacheData(
       filePath: filePath,
-      localPath: localPath,
+      localPath: localPath ?? filePath,
       cachedAt: DateTime.now(),
     );
 
@@ -220,17 +203,11 @@ class CacheService {
   ) async {
     developer.log('Caching current user avatar with file path: $filePath');
 
-    final dir = await _getLocalImageDirectory();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'current_user_$timestamp.jpg';
-    final localPath = '$dir/$fileName';
-
-    final file = File(localPath);
-    await file.writeAsBytes(imageBytes);
+    final localPath = await _saveImageToLocal('current_user', imageBytes);
 
     final cacheData = ImageCacheData(
       filePath: filePath,
-      localPath: localPath,
+      localPath: localPath ?? filePath,
       cachedAt: DateTime.now(),
     );
 

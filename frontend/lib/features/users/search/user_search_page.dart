@@ -1,6 +1,6 @@
 // frontend/lib/features/users/search/user_search_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:mitron/core/utils/platform_image_provider.dart';
 import 'package:mitron/models/profile.dart';
 import 'package:mitron/services/auth_service.dart';
 import 'package:mitron/services/cache_service.dart';
@@ -68,7 +68,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
             final localPath = snapshot.data;
             if (localPath != null && localPath.isNotEmpty) {
               return CircleAvatar(
-                backgroundImage: FileImage(File(localPath)),
+                backgroundImage: platformImageProvider(localPath),
                 child: null,
               );
             }

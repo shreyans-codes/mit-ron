@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/mitron_colors.dart';
+import '../../core/utils/platform_image_provider.dart';
 import '../../models/auth_user.dart';
 import '../../services/auth_service.dart';
 import '../../services/cache_service.dart';
@@ -23,7 +23,7 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _name;
   late TextEditingController _bio;
-  File? _imageFile;
+  XFile? _imageFile;
   final _picker = ImagePicker();
 
   bool _updating = false;
@@ -65,7 +65,7 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       setState(() {
-        _imageFile = File(pickedFile.path);
+        _imageFile = pickedFile;
       });
     }
   }
@@ -121,10 +121,8 @@ class _UpdateProfilePageState extends State<UpdateProfilePage> {
                         radius: 60,
                         backgroundColor: mc.cardSurface,
                         backgroundImage: _imageFile != null
-                            ? FileImage(_imageFile!)
-                            : (_avatarPath != null
-                                  ? NetworkImage(_avatarPath!) as ImageProvider
-                                  : null),
+                            ? platformImageProvider(_imageFile!.path)
+                            : platformImageProvider(_avatarPath),
                         child: (_imageFile == null && _avatarPath == null)
                             ? const Icon(Icons.person, size: 60)
                             : null,

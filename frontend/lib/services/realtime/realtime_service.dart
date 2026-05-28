@@ -1,4 +1,3 @@
-import 'dart:async';
 import '../../models/notification.dart';
 import '../../models/message.dart';
 
@@ -17,19 +16,6 @@ abstract class RealtimeService {
     Function(Message) onMessage,
   );
   Future<void> unsubscribeFromChatMessages(String chatId);
-
-  // Legacy methods for backward compatibility
-  Future<void> subscribeToGroupMessages(
-    String groupId,
-    Function(Message) onMessage,
-  );
-  Future<void> unsubscribeFromGroupMessages(String groupId);
-
-  Future<void> subscribeToEventMessages(
-    String eventId,
-    Function(Message) onMessage,
-  );
-  Future<void> unsubscribeFromEventMessages(String eventId);
 }
 
 class NoOpRealtimeService implements RealtimeService {
@@ -67,22 +53,4 @@ class NoOpRealtimeService implements RealtimeService {
 
   @override
   Future<void> unsubscribeFromChatMessages(String chatId) async {}
-
-  @override
-  Future<void> subscribeToGroupMessages(
-    String groupId,
-    Function(Message) onMessage,
-  ) async {}
-
-  @override
-  Future<void> unsubscribeFromGroupMessages(String groupId) async {}
-
-  @override
-  Future<void> subscribeToEventMessages(
-    String eventId,
-    Function(Message) onMessage,
-  ) async {}
-
-  @override
-  Future<void> unsubscribeFromEventMessages(String eventId) async {}
 }

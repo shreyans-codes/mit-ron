@@ -27,10 +27,10 @@ class Message {
 
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
-      id: json['id'] as String,
-      groupId: json['group_id'] as String?,
-      chatId: json['chat_id'] as String?,
-      senderId: json['sender_id'] as String,
+      id: json['id'].toString(),
+      groupId: json['group_id']?.toString(),
+      chatId: json['chat_id']?.toString(),
+      senderId: json['sender_id'].toString(),
       senderName:
           (json['sender_name'] ?? json['senderName'] ?? 'Unknown') as String,
       content: (json['content'] ?? '') as String,
@@ -60,4 +60,35 @@ class Message {
   bool get isThread => threadId != null;
 
   bool get isReply => parentId != null;
+
+  bool get hasResolvedSenderName =>
+      senderName.isNotEmpty && senderName != 'Unknown';
+
+  Message copyWith({
+    String? id,
+    String? groupId,
+    String? chatId,
+    String? senderId,
+    String? senderName,
+    String? content,
+    String? type,
+    String? threadId,
+    String? parentId,
+    bool? isThreadRoot,
+    DateTime? createdAt,
+  }) {
+    return Message(
+      id: id ?? this.id,
+      groupId: groupId ?? this.groupId,
+      chatId: chatId ?? this.chatId,
+      senderId: senderId ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      content: content ?? this.content,
+      type: type ?? this.type,
+      threadId: threadId ?? this.threadId,
+      parentId: parentId ?? this.parentId,
+      isThreadRoot: isThreadRoot ?? this.isThreadRoot,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 }

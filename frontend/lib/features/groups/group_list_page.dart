@@ -1,6 +1,6 @@
 // frontend/lib/features/groups/group_list_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:mitron/core/utils/platform_image_provider.dart';
 import 'package:mitron/models/group.dart';
 import 'package:mitron/services/auth_service.dart';
 import 'package:mitron/services/cache_service.dart';
@@ -195,7 +195,7 @@ class _GroupListPageState extends State<GroupListPage> {
                           final localPath = snapshot.data;
                           if (localPath != null && localPath.isNotEmpty) {
                             return CircleAvatar(
-                              backgroundImage: FileImage(File(localPath)),
+                              backgroundImage: platformImageProvider(localPath),
                             );
                           }
                           return CircleAvatar(
@@ -270,12 +270,16 @@ class _GroupListPageState extends State<GroupListPage> {
                               ),
                             )
                           : null,
-                      onTap: () {
-                        Navigator.of(context).push(
+                      onTap: () async {
+                        setState(() {
+                          _groups[index] = group.copyWith(unreadCount: 0);
+                        });
+                        await Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => GroupChatPage(group: group),
                           ),
                         );
+                        await _refreshInBackground();
                       },
                     ),
                   );

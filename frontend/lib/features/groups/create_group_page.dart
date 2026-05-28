@@ -1,8 +1,8 @@
 // frontend/lib/features/groups/create_group_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mitron/services/auth_service.dart';
+import 'package:mitron/core/utils/platform_image_provider.dart';
 
 class CreateGroupPage extends StatefulWidget {
   const CreateGroupPage({super.key});
@@ -54,7 +54,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
         final group = await AuthService.instance.createGroup(
           _nameController.text.trim(),
           description: _descriptionController.text.trim(),
-          avatarPath: _groupIcon?.path,
+          avatarFile: _groupIcon,
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -98,7 +98,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                         context,
                       ).colorScheme.primaryContainer,
                       backgroundImage: _groupIcon != null
-                          ? FileImage(File(_groupIcon!.path))
+                          ? platformImageProvider(_groupIcon!.path)
                           : null,
                       child: _groupIcon == null
                           ? Icon(

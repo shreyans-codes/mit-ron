@@ -206,6 +206,12 @@ class NotificationService {
       headers: {'Authorization': authHeader},
     );
 
+    if (response.statusCode == 401) {
+      debugPrint('Received 401, redirecting to login');
+      await AuthService.instance.logout();
+      return;
+    }
+
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       _notifications.clear();
@@ -226,6 +232,12 @@ class NotificationService {
       headers: {'Authorization': authHeader},
     );
 
+    if (response.statusCode == 401) {
+      debugPrint('Received 401 in getUnreadCount, redirecting to login');
+      await AuthService.instance.logout();
+      return 0;
+    }
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       _unreadCount = data['unread_count'] ?? 0;
@@ -244,6 +256,12 @@ class NotificationService {
       Uri.parse(url),
       headers: {'Authorization': authHeader},
     );
+
+    if (response.statusCode == 401) {
+      debugPrint('Received 401 in markAsRead, redirecting to login');
+      await AuthService.instance.logout();
+      return;
+    }
 
     if (response.statusCode == 200) {
       final index = _notifications.indexWhere((n) => n.id == notificationId);
@@ -265,6 +283,12 @@ class NotificationService {
       ),
       headers: {'Authorization': authHeader},
     );
+
+    if (response.statusCode == 401) {
+      debugPrint('Received 401 in markAllAsRead, redirecting to login');
+      await AuthService.instance.logout();
+      return;
+    }
 
     if (response.statusCode == 200) {
       for (var i = 0; i < _notifications.length; i++) {

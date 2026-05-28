@@ -1,7 +1,8 @@
 // frontend/lib/services/auth_service.dart
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as developer; // Import dart:developer for log
 import '../core/constants/api_constants.dart';
@@ -24,6 +25,7 @@ class AuthService {
 
   String? _token;
   AuthUser? _currentUser;
+  final Map<String, String> _senderDisplayNames = {};
 
   String? get token => _token;
 
@@ -33,6 +35,69 @@ class AuthService {
 
   AuthUser? get currentUser => _currentUser;
   bool get isAuthenticated => _token != null;
+
+  Function()? on401Redirect;
+
+  static String displayNameForProfile(Profile profile) =>
+      profile.displayName.isNotEmpty ? profile.displayName : profile.username;
+
+  static String displayNameForUser(AuthUser user) =>
+      user.displayName.isNotEmpty ? user.displayName : user.username;
+
+  void cacheSenderName(String userId, String name) {
+    if (name.isNotEmpty && name != 'Unknown') {
+      _senderDisplayNames[userId] = name;
+    }
+  }
+
+  void cacheSenderNamesFromMessages(Iterable<Message> messages) {
+    for (final message in messages) {
+      cacheSenderName(message.senderId, message.senderName);
+    }
+  }
+
+  void cacheSenderNamesFromProfiles(Iterable<Profile> profiles) {
+    for (final profile in profiles) {
+      cacheSenderName(profile.id, displayNameForProfile(profile));
+    }
+  }
+
+  Message enrichMessage(Message message) {
+    if (message.hasResolvedSenderName) {
+      cacheSenderName(message.senderId, message.senderName);
+      return message;
+    }
+
+    final cached = _senderDisplayNames[message.senderId];
+    if (cached != null) {
+      return message.copyWith(senderName: cached);
+    }
+
+    final user = _currentUser;
+    if (user != null && message.senderId == user.id) {
+      final name = displayNameForUser(user);
+      cacheSenderName(message.senderId, name);
+      return message.copyWith(senderName: name);
+    }
+
+    return message;
+  }
+
+  List<Message> enrichMessages(Iterable<Message> messages) {
+    return messages.map(enrichMessage).toList();
+  }
+
+  Future<http.Response> _checkAuth(http.Response response) async {
+    if (response.statusCode == 401) {
+      developer.log('Received 401, logging out user');
+      await logout();
+      if (on401Redirect != null) {
+        on401Redirect!();
+      }
+      throw AuthException('Session expired');
+    }
+    return response;
+  }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -104,12 +169,27 @@ class AuthService {
     await _clearSession();
   }
 
+  Future<http.MultipartFile> _multipartFileFromXFile(
+    String fieldName,
+    XFile file,
+  ) async {
+    if (kIsWeb) {
+      final bytes = await file.readAsBytes();
+      return http.MultipartFile.fromBytes(
+        fieldName,
+        bytes,
+        filename: file.name,
+      );
+    }
+    return http.MultipartFile.fromPath(fieldName, file.path);
+  }
+
   // Handles profile updates, including text fields and optional avatar file
   Future<AuthUser> updateProfile({
     String? displayName,
     String? bio,
     String? username,
-    File? avatar,
+    XFile? avatar,
   }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
@@ -130,9 +210,7 @@ class AuthService {
     }
 
     if (avatar != null) {
-      request.files.add(
-        await http.MultipartFile.fromPath('avatar', avatar.path),
-      );
+      request.files.add(await _multipartFileFromXFile('avatar', avatar));
     }
 
     if (request.fields.isEmpty && request.files.isEmpty) {
@@ -154,7 +232,7 @@ class AuthService {
   }
 
   // DEPRECATED: use updateProfile instead
-  Future<AuthUser> uploadAvatar({required File avatar}) async {
+  Future<AuthUser> uploadAvatar({required XFile avatar}) async {
     return updateProfile(avatar: avatar);
   }
 
@@ -190,6 +268,10 @@ class AuthService {
       headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
 
+    if (response.statusCode == 401) {
+      await _checkAuth(response);
+    }
+
     if (response.statusCode == 200) {
       return _profileFromJson(jsonDecode(response.body));
     } else {
@@ -221,7 +303,7 @@ class AuthService {
   Future<Group> createGroup(
     String name, {
     String? description,
-    String? avatarPath,
+    XFile? avatarFile,
   }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
@@ -232,10 +314,8 @@ class AuthService {
     if (description != null) {
       request.fields['description'] = description;
     }
-    if (avatarPath != null) {
-      request.files.add(
-        await http.MultipartFile.fromPath('avatar', avatarPath),
-      );
+    if (avatarFile != null) {
+      request.files.add(await _multipartFileFromXFile('avatar', avatarFile));
     }
 
     final streamedResponse = await request.send();
@@ -254,7 +334,7 @@ class AuthService {
     String groupId, {
     String? name,
     String? description,
-    String? avatarPath,
+    XFile? avatarFile,
   }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
@@ -268,10 +348,8 @@ class AuthService {
     if (description != null) {
       request.fields['description'] = description;
     }
-    if (avatarPath != null) {
-      request.files.add(
-        await http.MultipartFile.fromPath('avatar', avatarPath),
-      );
+    if (avatarFile != null) {
+      request.files.add(await _multipartFileFromXFile('avatar', avatarFile));
     }
 
     final streamedResponse = await request.send();
@@ -318,6 +396,10 @@ class AuthService {
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.myGroups}'),
       headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
+
+    if (response.statusCode == 401) {
+      await _checkAuth(response);
+    }
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -378,7 +460,7 @@ class AuthService {
     );
 
     if (response.statusCode == 201) {
-      return Message.fromJson(jsonDecode(response.body));
+      return enrichMessage(Message.fromJson(jsonDecode(response.body)));
     } else {
       final error =
           jsonDecode(response.body)['error'] ?? 'Failed to send message';
@@ -404,36 +486,12 @@ class AuthService {
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
-      return data.map((item) => Message.fromJson(item)).toList();
+      final messages = data.map((item) => Message.fromJson(item)).toList();
+      cacheSenderNamesFromMessages(messages);
+      return enrichMessages(messages);
     } else {
       final error =
           jsonDecode(response.body)['error'] ?? 'Failed to get messages';
-      throw AuthException(error);
-    }
-  }
-
-  Future<List<Message>> getEventMessages(
-    String chatId, {
-    String? lastMessageId,
-  }) async {
-    if (_token == null) throw AuthException('Not authenticated');
-
-    var url =
-        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?chat_id=$chatId';
-    if (lastMessageId != null) {
-      url += '&last_message_id=$lastMessageId';
-    }
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
-    );
-
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((item) => Message.fromJson(item)).toList();
-    } else {
-      final error =
-          jsonDecode(response.body)['error'] ?? 'Failed to get event messages';
       throw AuthException(error);
     }
   }
@@ -588,7 +646,9 @@ class AuthService {
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
-      return data.map((item) => _profileFromJson(item)).toList();
+      final members = data.map((item) => _profileFromJson(item)).toList();
+      cacheSenderNamesFromProfiles(members);
+      return members;
     } else {
       final error =
           jsonDecode(response.body)['error'] ?? 'Failed to fetch group members';
@@ -662,6 +722,10 @@ class AuthService {
       ),
       headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
+
+    if (response.statusCode == 401) {
+      await _checkAuth(response);
+    }
 
     if (response.statusCode == 200) {
       return Group.fromJson(jsonDecode(response.body));
@@ -812,9 +876,7 @@ class AuthService {
     }
 
     if (!shouldRefresh && cachedGroup != null) {
-      final group = await getGroupDetail(groupId);
-      await updateCachedGroup(group);
-      return group;
+      return cachedGroup;
     }
 
     final group = await getGroupDetail(groupId);
@@ -829,17 +891,23 @@ class AuthService {
     final cachedGroups = await getCachedGroups();
     final updatedGroups = cachedGroups.map((g) {
       if (g.id == groupId) {
-        return Group(
-          id: g.id,
-          name: g.name,
-          description: g.description,
-          creatorId: g.creatorId,
-          createdAt: g.createdAt,
-          memberCount: memberCount,
-          groupImageUrl: g.groupImageUrl,
-        );
+        return g.copyWith(memberCount: memberCount);
       }
       return g;
+    }).toList();
+    await cacheGroups(updatedGroups);
+  }
+
+  Future<void> updateCachedGroupUnreadCount(
+    String groupId,
+    int unreadCount,
+  ) async {
+    final cachedGroups = await getCachedGroups();
+    final updatedGroups = cachedGroups.map((group) {
+      if (group.id == groupId) {
+        return group.copyWith(unreadCount: unreadCount);
+      }
+      return group;
     }).toList();
     await cacheGroups(updatedGroups);
   }
@@ -1055,6 +1123,7 @@ class AuthService {
   Future<void> _clearSession() async {
     _token = null;
     _currentUser = null;
+    _senderDisplayNames.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_userKey);
