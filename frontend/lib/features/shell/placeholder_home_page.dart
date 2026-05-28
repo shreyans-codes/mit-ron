@@ -60,6 +60,7 @@ class _PlaceholderHomePageState extends State<PlaceholderHomePage> {
 
   Future<void> _loadRealtimeData() async {
     await NotificationService.instance.getUnreadCount();
+    await NotificationService.instance.ensurePushRegistration();
     final user = AuthService.instance.currentUser;
     if (user != null) {
       await NotificationService.instance.startRealtimeSubscription(user.id);

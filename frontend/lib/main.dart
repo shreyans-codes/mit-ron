@@ -72,6 +72,7 @@ Future<void> main() async {
   // Initialize Notification Service
   await NotificationService.instance.initialize();
   NotificationService.instance.setRealtimeService(SupabaseRealtimeService());
+  await NotificationService.instance.ensurePushRegistration();
 
   runApp(MitronApp(themeController: themeController));
 }

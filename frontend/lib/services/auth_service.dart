@@ -987,6 +987,7 @@ class AuthService {
           userId,
           filePath,
           imageBytes,
+          signedUrl,
         );
       }
     } catch (e) {
@@ -1015,6 +1016,7 @@ class AuthService {
           groupId,
           filePath,
           imageBytes,
+          signedUrl,
         );
       }
     } catch (e) {

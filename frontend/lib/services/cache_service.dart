@@ -89,6 +89,7 @@ class CacheService {
     String userId,
     String filePath,
     Uint8List imageBytes,
+    String? webImageUrl,
   ) async {
     developer.log('Caching avatar for user $userId with file path: $filePath');
 
@@ -96,7 +97,7 @@ class CacheService {
 
     final cacheData = ImageCacheData(
       filePath: filePath,
-      localPath: localPath ?? filePath,
+      localPath: localPath ?? webImageUrl ?? filePath,
       cachedAt: DateTime.now(),
     );
 
@@ -145,6 +146,7 @@ class CacheService {
     String groupId,
     String filePath,
     Uint8List imageBytes,
+    String? webImageUrl,
   ) async {
     developer.log('Caching image for group $groupId with file path: $filePath');
 
@@ -152,7 +154,7 @@ class CacheService {
 
     final cacheData = ImageCacheData(
       filePath: filePath,
-      localPath: localPath ?? filePath,
+      localPath: localPath ?? webImageUrl ?? filePath,
       cachedAt: DateTime.now(),
     );
 
@@ -200,6 +202,7 @@ class CacheService {
   Future<void> cacheCurrentUserAvatar(
     String filePath,
     Uint8List imageBytes,
+    String? webImageUrl,
   ) async {
     developer.log('Caching current user avatar with file path: $filePath');
 
@@ -207,7 +210,7 @@ class CacheService {
 
     final cacheData = ImageCacheData(
       filePath: filePath,
-      localPath: localPath ?? filePath,
+      localPath: localPath ?? webImageUrl ?? filePath,
       cachedAt: DateTime.now(),
     );
 

@@ -25,20 +25,33 @@ class Message {
     required this.createdAt,
   });
 
+  static DateTime _parseCreatedAt(dynamic value) {
+    if (value is DateTime) {
+      return value;
+    }
+    if (value is String && value.isNotEmpty) {
+      return DateTime.parse(value);
+    }
+    return DateTime.now();
+  }
+
   factory Message.fromJson(Map<String, dynamic> json) {
+    final rawSenderName = json['sender_name'] ?? json['senderName'];
+    final senderName = rawSenderName?.toString() ?? 'Unknown';
     return Message(
       id: json['id'].toString(),
       groupId: json['group_id']?.toString(),
       chatId: json['chat_id']?.toString(),
       senderId: json['sender_id'].toString(),
-      senderName:
-          (json['sender_name'] ?? json['senderName'] ?? 'Unknown') as String,
+      senderName: senderName,
       content: (json['content'] ?? '') as String,
       type: (json['type'] ?? 'text') as String,
-      threadId: json['thread_id'] as String?,
-      parentId: json['parent_id'] as String?,
-      isThreadRoot: json['is_thread_root'] as bool? ?? false,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      threadId: json['thread_id']?.toString(),
+      parentId: json['parent_id']?.toString(),
+      isThreadRoot:
+          json['is_thread_root'] == true ||
+          json['is_thread_root']?.toString() == 'true',
+      createdAt: _parseCreatedAt(json['created_at']),
     );
   }
 

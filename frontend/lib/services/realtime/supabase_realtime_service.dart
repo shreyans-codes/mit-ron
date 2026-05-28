@@ -7,7 +7,7 @@ import '../realtime/realtime_service.dart';
 
 class SupabaseRealtimeService implements RealtimeService {
   RealtimeChannel? _channel;
-  RealtimeChannel? _chatChannel;
+  final Map<String, RealtimeChannel> _chatChannels = {};
   String? _currentUserId;
 
   SupabaseRealtimeService();
@@ -60,16 +60,17 @@ class SupabaseRealtimeService implements RealtimeService {
     String chatId,
     Function(Message) onMessage,
   ) async {
-    if (_chatChannel != null) {
-      await _client.removeChannel(_chatChannel!);
-      _chatChannel = null;
+    final existingChannel = _chatChannels[chatId];
+    if (existingChannel != null) {
+      await _client.removeChannel(existingChannel);
     }
 
-    _chatChannel = _client.channel('chat:$chatId');
+    final channel = _client.channel('chat:$chatId');
+    _chatChannels[chatId] = channel;
 
     final completer = Completer<RealtimeSubscribeStatus>();
 
-    _chatChannel!.onPostgresChanges(
+    channel.onPostgresChanges(
       event: PostgresChangeEvent.insert,
       schema: 'public',
       table: 'messages',
@@ -92,7 +93,7 @@ class SupabaseRealtimeService implements RealtimeService {
       },
     );
 
-    _chatChannel!.subscribe((status, err) {
+    channel.subscribe((status, err) {
       if (!completer.isCompleted) {
         completer.complete(status);
       }
@@ -101,21 +102,25 @@ class SupabaseRealtimeService implements RealtimeService {
     final status = await completer.future;
     if (status.toString().contains('timedOut')) {
       await Future.delayed(const Duration(seconds: 2));
-      _chatChannel!.subscribe((_, _) {});
+      channel.subscribe((_, _) {});
     }
   }
 
   @override
   Future<void> unsubscribeFromChatMessages(String chatId) async {
-    if (_chatChannel != null) {
-      await _client.removeChannel(_chatChannel!);
-      _chatChannel = null;
+    final channel = _chatChannels.remove(chatId);
+    if (channel != null) {
+      await _client.removeChannel(channel);
     }
   }
 
   @override
   void dispose() {
     unsubscribe();
-    unsubscribeFromChatMessages('');
+    final channels = _chatChannels.values.toList();
+    for (final channel in channels) {
+      _client.removeChannel(channel);
+    }
+    _chatChannels.clear();
   }
 }

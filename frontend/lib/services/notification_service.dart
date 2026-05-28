@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
@@ -65,6 +66,17 @@ class NotificationService {
     // Load saved preference
     final prefs = await SharedPreferences.getInstance();
     _notificationsEnabled = prefs.getBool(_notificationsEnabledKey) ?? false;
+
+    if (!kIsWeb && ApiConstants.fcmProjectId.isNotEmpty) {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onMessage.listen(_onForegroundPushMessage);
+      FirebaseMessaging.instance.onTokenRefresh.listen(_registerFcmToken);
+    }
+  }
+
+  Future<void> ensurePushRegistration() async {
+    if (!_notificationsEnabled) return;
+    await registerFcmTokenIfLoggedIn();
   }
 
   Future<bool> requestNotificationPermission() async {
@@ -155,6 +167,22 @@ class NotificationService {
     _unreadCount++;
     _onUnreadCountChanged?.call(_unreadCount);
     _showLocalNotification(notif);
+  }
+
+  void _onForegroundPushMessage(RemoteMessage message) {
+    final notif = message.notification;
+    if (notif == null) return;
+    final fallbackId = message.messageId ?? DateTime.now().toIso8601String();
+    _showLocalNotification(
+      AppNotification(
+        id: fallbackId,
+        userId: AuthService.instance.currentUser?.id ?? '',
+        title: notif.title ?? 'Mitron',
+        body: notif.body ?? '',
+        type: NotificationType.newMessage,
+        createdAt: DateTime.now(),
+      ),
+    );
   }
 
   void _onNotificationTapped(NotificationResponse response) {
@@ -318,4 +346,12 @@ class NotificationService {
   void dispose() {
     _realtimeService.dispose();
   }
+}
+
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  if (ApiConstants.fcmProjectId.isEmpty) return;
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {}
 }

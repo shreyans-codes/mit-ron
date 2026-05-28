@@ -5,7 +5,7 @@ class ApiConstants {
     if (dotenv.env['LOCAL'] == '1') {
       return 'https://mit-ron.shreyanssethia.in';
     }
-    return dotenv.env['API_BASE_URL'] ?? 'https://mit-ron.onrender.com';
+    return dotenv.env['API_BASE_URL'] ?? 'https://mit-ron.shreyanssethia.in';
   }
 
   static String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';

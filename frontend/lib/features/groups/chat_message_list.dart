@@ -36,11 +36,22 @@ void scrollChatToBottom(ScrollController controller) {
     });
     return;
   }
+  final target = controller.position.maxScrollExtent;
+  controller.jumpTo(target);
   controller.animateTo(
-    controller.position.maxScrollExtent,
-    duration: const Duration(milliseconds: 300),
+    target,
+    duration: const Duration(milliseconds: 220),
     curve: Curves.easeOut,
   );
+  Future<void>.delayed(const Duration(milliseconds: 80), () {
+    if (!controller.hasClients) return;
+    final latestTarget = controller.position.maxScrollExtent;
+    controller.animateTo(
+      latestTarget,
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+    );
+  });
 }
 
 DateTime dateOnly(DateTime value) =>
@@ -134,12 +145,24 @@ class ChatMessageBubble extends StatelessWidget {
     required this.text,
     required this.isMe,
     required this.timestamp,
+    this.onLongPress,
+    this.isSelected = false,
+    this.replyPreview,
+    this.threadReplyCount = 0,
+    this.onOpenThread,
+    this.isThreadContext = false,
   });
 
   final String sender;
   final String text;
   final bool isMe;
   final DateTime timestamp;
+  final VoidCallback? onLongPress;
+  final bool isSelected;
+  final String? replyPreview;
+  final int threadReplyCount;
+  final VoidCallback? onOpenThread;
+  final bool isThreadContext;
 
   String _formatTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -152,6 +175,7 @@ class ChatMessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasThread = threadReplyCount > 0;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
@@ -166,26 +190,79 @@ class ChatMessageBubble extends StatelessWidget {
                 style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey),
               ),
             ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isMe
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(20),
-                topRight: const Radius.circular(20),
-                bottomLeft: Radius.circular(isMe ? 20 : 0),
-                bottomRight: Radius.circular(isMe ? 0 : 20),
+          GestureDetector(
+            onLongPress: onLongPress,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? theme.colorScheme.tertiaryContainer
+                    : isMe
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(20),
+                  topRight: const Radius.circular(20),
+                  bottomLeft: Radius.circular(isMe ? 20 : 0),
+                  bottomRight: Radius.circular(isMe ? 0 : 20),
+                ),
               ),
-            ),
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.75,
-            ),
-            child: Text(
-              text,
-              style: TextStyle(
-                color: isMe ? Colors.white : theme.colorScheme.onSurfaceVariant,
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (replyPreview != null && replyPreview!.isNotEmpty) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        replyPreview!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isMe
+                              ? Colors.white.withValues(alpha: 0.92)
+                              : theme.colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                  Text(
+                    text,
+                    style: TextStyle(
+                      color: isMe
+                          ? Colors.white
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (!isThreadContext && hasThread && onOpenThread != null) ...[
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: onOpenThread,
+                      child: Text(
+                        '$threadReplyCount ${threadReplyCount == 1 ? 'reply' : 'replies'} in thread',
+                        style: TextStyle(
+                          color: isMe
+                              ? Colors.white.withValues(alpha: 0.95)
+                              : theme.colorScheme.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
