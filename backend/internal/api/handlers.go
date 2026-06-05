@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -766,20 +767,29 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 	}
 
 	var req struct {
-		GroupID      string  `json:"group_id"`
-		EventID      string  `json:"event_id"`
-		Content      string  `json:"content" binding:"required"`
-		ParentID     *string `json:"parent_id"`
-		ThreadID     *string `json:"thread_id"`
-		IsThreadRoot bool    `json:"is_thread_root"`
+		GroupID          string   `json:"group_id"`
+		EventID          string   `json:"event_id"`
+		Content          string   `json:"content"`
+		Type             string   `json:"type"`
+		Question         string   `json:"question"`
+		Options          []string `json:"options"`
+		IsMultipleChoice bool     `json:"is_multiple_choice"`
+		ParentID         *string  `json:"parent_id"`
+		ThreadID         *string  `json:"thread_id"`
+		IsThreadRoot     bool     `json:"is_thread_root"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if req.Content == "" {
+	isPoll := req.Type == string(models.MessageTypePoll) || req.Question != ""
+	if !isPoll && req.Content == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "content is required"})
+		return
+	}
+	if isPoll && strings.TrimSpace(req.Question) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "poll question is required"})
 		return
 	}
 
@@ -808,7 +818,20 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 		return
 	}
 
-	message, err := h.auth.CreateMessage(chatID, userID, req.Content, req.ParentID, req.ThreadID, req.IsThreadRoot)
+	var message *models.Message
+	if isPoll {
+		message, err = h.auth.CreatePollMessage(
+			chatID,
+			userID,
+			req.Question,
+			req.Options,
+			req.IsMultipleChoice,
+			req.ParentID,
+			req.ThreadID,
+		)
+	} else {
+		message, err = h.auth.CreateMessage(chatID, userID, req.Content, req.ParentID, req.ThreadID, req.IsThreadRoot)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to send message: %v", err)})
 		return
@@ -822,24 +845,41 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 	if h.notification != nil {
 		go func() {
 			var targetGroupID string
+			var refID string
+			refType := models.ReferenceTypeGroup
+			title := "New Message"
+
 			if isEventChat {
-				targetGroupID = req.EventID
+				event, err := h.auth.GetEventByID(req.EventID)
+				if err != nil {
+					log.Printf("Failed to get event for notifications: %v", err)
+					return
+				}
+				targetGroupID = event.GroupID
+				refID = req.EventID
+				refType = models.ReferenceTypeEvent
+				title = event.Title
+				if groupName == "" {
+					group, err := h.auth.GetGroupByID(event.GroupID)
+					if err == nil {
+						groupName = group.Name
+					}
+				}
+				if groupName != "" {
+					title = fmt.Sprintf("%s · %s", groupName, event.Title)
+				}
 			} else {
 				targetGroupID = req.GroupID
+				refID = req.GroupID
+				if groupName != "" {
+					title = groupName
+				}
 			}
 
 			members, err := h.auth.GetGroupMembers(targetGroupID)
 			if err != nil {
 				log.Printf("Failed to get group members for notifications: %v", err)
 				return
-			}
-
-			title := "New Message"
-			if groupName != "" {
-				title = groupName
-			}
-			if isEventChat {
-				title = "New Event Message"
 			}
 
 			body := message.Content
@@ -851,17 +891,12 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 				body = fmt.Sprintf("%s: %s", user.Username, body)
 			}
 
-			refType := models.ReferenceTypeGroup
-			if isEventChat {
-				refType = models.ReferenceTypeEvent
-			}
-
 			for _, member := range members {
 				if member.ID != userID {
 					_, _ = h.notification.CreateNotification(
 						member.ID,
 						models.NotificationTypeNewMessage,
-						&message.ID,
+						&refID,
 						&refType,
 						title,
 						body,
@@ -876,7 +911,7 @@ func (h *Handler) HandleSendMessage(c *gin.Context) {
 
 func (h *Handler) HandleGetMessages(c *gin.Context) {
 	token := c.GetString("token")
-	_, err := h.getUserIDFromToken(token)
+	userID, err := h.getUserIDFromToken(token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -905,24 +940,185 @@ func (h *Handler) HandleGetMessages(c *gin.Context) {
 		return
 	}
 
-	// Don't automatically mark as read - user should explicitly do that
-	// when they leave the chat or tap "mark as read"
+	limit := 40
+	if limitParam := c.Query("limit"); limitParam != "" {
+		if parsed, parseErr := strconv.Atoi(limitParam); parseErr == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	beforeMessageID := c.Query("before_message_id")
+	var beforePtr *string
+	if beforeMessageID != "" {
+		beforePtr = &beforeMessageID
+	}
 
 	var messages []models.Message
 	if chatIDParam != "" {
-		// Direct chat ID - fetch messages by chat ID
-		messages, err = h.auth.GetChatMessages(chatID)
+		messages, err = h.auth.GetChatMessagesPaginated(chatID, limit, beforePtr)
 	} else if eventID != "" {
-		messages, err = h.auth.GetEventMessages(eventID)
+		eventChatID, chatErr := h.auth.GetEventChatID(eventID)
+		if chatErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chat"})
+			return
+		}
+		messages, err = h.auth.GetChatMessagesPaginated(eventChatID, limit, beforePtr)
 	} else {
-		messages, err = h.auth.GetMessages(groupID)
+		groupChatID, chatErr := h.auth.GetOrCreateGroupChat(groupID)
+		if chatErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chat"})
+			return
+		}
+		messages, err = h.auth.GetChatMessagesPaginated(groupChatID, limit, beforePtr)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get messages: %v", err)})
 		return
 	}
 
+	messages, err = h.auth.AttachPollDetails(messages, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load poll data: %v", err)})
+		return
+	}
+
 	c.JSON(http.StatusOK, messages)
+}
+
+func (h *Handler) HandleVotePoll(c *gin.Context) {
+	token := c.GetString("token")
+	userID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		MessageID string `json:"message_id" binding:"required"`
+		OptionID  string `json:"option_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	poll, err := h.auth.VotePoll(req.MessageID, userID, req.OptionID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, poll)
+}
+
+func (h *Handler) HandleGetGroupFlairs(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	groupID := c.Query("group_id")
+	if groupID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id is required"})
+		return
+	}
+
+	flairs, err := h.auth.GetGroupFlairs(groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, flairs)
+}
+
+func (h *Handler) HandleAddGroupFlair(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GroupID string `json:"group_id" binding:"required"`
+		Name    string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	flair, err := h.auth.AddGroupFlair(req.GroupID, strings.TrimSpace(req.Name))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, flair)
+}
+
+func (h *Handler) HandleAssignFlair(c *gin.Context) {
+	token := c.GetString("token")
+	requesterID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GroupID string `json:"group_id" binding:"required"`
+		UserID  string `json:"user_id"`
+		FlairID string `json:"flair_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	targetUserID := req.UserID
+	if targetUserID == "" {
+		targetUserID = requesterID
+	}
+
+	if err := h.auth.AssignFlair(req.GroupID, targetUserID, req.FlairID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "flair assigned"})
+}
+
+func (h *Handler) HandleRemoveFlair(c *gin.Context) {
+	token := c.GetString("token")
+	requesterID, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req struct {
+		GroupID string `json:"group_id" binding:"required"`
+		UserID  string `json:"user_id"`
+		FlairID string `json:"flair_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	targetUserID := req.UserID
+	if targetUserID == "" {
+		targetUserID = requesterID
+	}
+
+	if err := h.auth.RemoveFlair(req.GroupID, targetUserID, req.FlairID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "flair removed"})
 }
 
 func (h *Handler) HandleMarkMessagesRead(c *gin.Context) {
@@ -977,6 +1173,29 @@ func (h *Handler) HandleGetEvents(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, events)
+}
+
+func (h *Handler) HandleGetEventDetail(c *gin.Context) {
+	token := c.GetString("token")
+	_, err := h.getUserIDFromToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	eventID := c.Query("event_id")
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "event_id is required"})
+		return
+	}
+
+	event, err := h.auth.GetEventByID(eventID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "event not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, event)
 }
 
 func (h *Handler) HandleCreateEvent(c *gin.Context) {

@@ -3,6 +3,7 @@ import '../../models/group.dart';
 import '../../models/event.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/mitron_button.dart';
+import '../../widgets/mitron_app_bar.dart';
 import 'group_details_page.dart';
 import 'shared_chat_view.dart';
 
@@ -288,8 +289,8 @@ class _GroupChatPageState extends State<GroupChatPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: InkWell(
+      appBar: MitronAppBar(
+        titleWidget: InkWell(
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => GroupDetailsPage(
@@ -385,7 +386,7 @@ class _GroupChatPageState extends State<GroupChatPage>
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) =>
-                    _EventChatPage(event: event, group: _currentGroup),
+                    EventChatPage(event: event, group: _currentGroup),
               ),
             ),
             canEdit: canEdit,
@@ -523,17 +524,17 @@ class _EventCard extends StatelessWidget {
   }
 }
 
-class _EventChatPage extends StatefulWidget {
+class EventChatPage extends StatefulWidget {
   final Event event;
   final Group group;
 
-  const _EventChatPage({required this.event, required this.group});
+  const EventChatPage({super.key, required this.event, required this.group});
 
   @override
-  State<_EventChatPage> createState() => _EventChatPageState();
+  State<EventChatPage> createState() => _EventChatPageState();
 }
 
-class _EventChatPageState extends State<_EventChatPage> {
+class _EventChatPageState extends State<EventChatPage> {
   final GlobalKey<ChatMessagesPanelState> _chatKey =
       GlobalKey<ChatMessagesPanelState>();
 
@@ -560,8 +561,8 @@ class _EventChatPageState extends State<_EventChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.event.title),
+      appBar: MitronAppBar(
+        title: widget.event.title,
         actions: [
           if (!widget.event.isResolved)
             IconButton(

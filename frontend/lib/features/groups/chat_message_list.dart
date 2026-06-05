@@ -29,29 +29,16 @@ List<Message> refreshMessageSenders(List<Message> messages) {
   return AuthService.instance.enrichMessages(messages);
 }
 
-void scrollChatToBottom(ScrollController controller) {
-  if (!controller.hasClients) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      scrollChatToBottom(controller);
-    });
-    return;
+/// Merges older page results into existing chronological messages.
+List<Message> mergeOlderMessages(List<Message> existing, List<Message> older) {
+  var merged = <Message>[];
+  for (final message in older) {
+    merged = appendChatMessage(merged, message);
   }
-  final target = controller.position.maxScrollExtent;
-  controller.jumpTo(target);
-  controller.animateTo(
-    target,
-    duration: const Duration(milliseconds: 220),
-    curve: Curves.easeOut,
-  );
-  Future<void>.delayed(const Duration(milliseconds: 80), () {
-    if (!controller.hasClients) return;
-    final latestTarget = controller.position.maxScrollExtent;
-    controller.animateTo(
-      latestTarget,
-      duration: const Duration(milliseconds: 160),
-      curve: Curves.easeOut,
-    );
-  });
+  for (final message in existing) {
+    merged = appendChatMessage(merged, message);
+  }
+  return merged;
 }
 
 DateTime dateOnly(DateTime value) =>
@@ -288,10 +275,12 @@ class ChatMessageInput extends StatelessWidget {
     required this.controller,
     required this.onSend,
     required this.isLoading,
+    this.onCreatePoll,
   });
 
   final TextEditingController controller;
   final VoidCallback onSend;
+  final VoidCallback? onCreatePoll;
   final bool isLoading;
 
   @override
@@ -311,6 +300,12 @@ class ChatMessageInput extends StatelessWidget {
       child: SafeArea(
         child: Row(
           children: [
+            if (onCreatePoll != null)
+              IconButton(
+                onPressed: isLoading ? null : onCreatePoll,
+                icon: const Icon(Icons.poll_outlined),
+                tooltip: 'Create poll',
+              ),
             Expanded(
               child: TextField(
                 controller: controller,

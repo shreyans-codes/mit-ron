@@ -12,6 +12,8 @@ import '../models/profile.dart';
 import '../models/friend_lists.dart';
 import '../models/group.dart';
 import '../models/message.dart';
+import '../models/message_page_result.dart';
+import '../models/poll.dart';
 import '../models/event.dart';
 import 'auth_exception.dart';
 import 'cache_service.dart'; // Import the new cache service
@@ -435,6 +437,166 @@ class AuthService {
     }
   }
 
+  Future<Message> sendPollMessage({
+    required String groupId,
+    required String question,
+    required List<String> options,
+    bool isMultipleChoice = false,
+    String? eventId,
+  }) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.sendMessage}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_token!.trim()}',
+      },
+      body: jsonEncode({
+        'group_id': groupId,
+        'type': 'poll',
+        'question': question,
+        'options': options,
+        'is_multiple_choice': isMultipleChoice,
+        if (eventId != null) 'event_id': eventId,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      var message = Message.fromJson(body);
+      if (body['poll'] is Map<String, dynamic>) {
+        message = message.copyWith(
+          type: 'poll',
+          poll: MessagePoll.fromJson(body['poll'] as Map<String, dynamic>),
+        );
+      } else if (message.type != 'poll') {
+        message = message.copyWith(type: 'poll');
+      }
+      return enrichMessage(message);
+    }
+    final error =
+        jsonDecode(response.body)['error'] ?? 'Failed to create poll';
+    throw AuthException(error);
+  }
+
+  Future<MessagePoll> votePoll(String messageId, String optionId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.votePoll}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_token!.trim()}',
+      },
+      body: jsonEncode({
+        'message_id': messageId,
+        'option_id': optionId,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return MessagePoll.fromJson(jsonDecode(response.body));
+    }
+    final error = jsonDecode(response.body)['error'] ?? 'Failed to vote';
+    throw AuthException(error);
+  }
+
+  Future<List<Flair>> getGroupFlairs(String groupId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse(
+        '${ApiConstants.baseUrl}${ApiConstants.groupFlairs}?group_id=$groupId',
+      ),
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data
+          .map((item) => Flair.fromJson(item as Map<String, dynamic>))
+          .toList();
+    }
+    final error =
+        jsonDecode(response.body)['error'] ?? 'Failed to load flairs';
+    throw AuthException(error);
+  }
+
+  Future<Flair> addGroupFlair(String groupId, String name) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.groupFlairs}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_token!.trim()}',
+      },
+      body: jsonEncode({'group_id': groupId, 'name': name}),
+    );
+
+    if (response.statusCode == 201) {
+      return Flair.fromJson(jsonDecode(response.body));
+    }
+    final error =
+        jsonDecode(response.body)['error'] ?? 'Failed to add flair';
+    throw AuthException(error);
+  }
+
+  Future<void> assignGroupFlair({
+    required String groupId,
+    required String flairId,
+    String? userId,
+  }) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.assignGroupFlair}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_token!.trim()}',
+      },
+      body: jsonEncode({
+        'group_id': groupId,
+        'flair_id': flairId,
+        if (userId != null) 'user_id': userId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to assign flair';
+      throw AuthException(error);
+    }
+  }
+
+  Future<void> removeGroupFlair({
+    required String groupId,
+    required String flairId,
+    String? userId,
+  }) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}${ApiConstants.removeGroupFlair}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_token!.trim()}',
+      },
+      body: jsonEncode({
+        'group_id': groupId,
+        'flair_id': flairId,
+        if (userId != null) 'user_id': userId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      final error =
+          jsonDecode(response.body)['error'] ?? 'Failed to remove flair';
+      throw AuthException(error);
+    }
+  }
+
   Future<Message> sendMessage({
     required String groupId,
     required String content,
@@ -468,16 +630,17 @@ class AuthService {
     }
   }
 
-  Future<List<Message>> getMessages(
+  Future<MessagePageResult> getMessagesPage(
     String chatId, {
-    String? lastMessageId,
+    String? beforeMessageId,
+    int limit = 40,
   }) async {
     if (_token == null) throw AuthException('Not authenticated');
 
     var url =
-        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?chat_id=$chatId';
-    if (lastMessageId != null) {
-      url += '&last_message_id=$lastMessageId';
+        '${ApiConstants.baseUrl}${ApiConstants.getMessages}?chat_id=$chatId&limit=$limit';
+    if (beforeMessageId != null && beforeMessageId.isNotEmpty) {
+      url += '&before_message_id=$beforeMessageId';
     }
     final response = await http.get(
       Uri.parse(url),
@@ -488,12 +651,46 @@ class AuthService {
       final List<dynamic> data = jsonDecode(response.body);
       final messages = data.map((item) => Message.fromJson(item)).toList();
       cacheSenderNamesFromMessages(messages);
-      return enrichMessages(messages);
+      final enriched = enrichMessages(messages);
+      return MessagePageResult(
+        messages: enriched,
+        hasMore: enriched.length >= limit,
+      );
     } else {
       final error =
           jsonDecode(response.body)['error'] ?? 'Failed to get messages';
       throw AuthException(error);
     }
+  }
+
+  Future<List<Message>> getMessages(
+    String chatId, {
+    String? lastMessageId,
+  }) async {
+    final page = await getMessagesPage(
+      chatId,
+      beforeMessageId: lastMessageId,
+      limit: 100,
+    );
+    return page.messages;
+  }
+
+  Future<Event> getEventDetail(String eventId) async {
+    if (_token == null) throw AuthException('Not authenticated');
+
+    final response = await http.get(
+      Uri.parse(
+        '${ApiConstants.baseUrl}${ApiConstants.eventDetail}?event_id=$eventId',
+      ),
+      headers: {'Authorization': 'Bearer ${_token!.trim()}'},
+    );
+
+    if (response.statusCode == 200) {
+      return Event.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    final error =
+        jsonDecode(response.body)['error'] ?? 'Failed to get event detail';
+    throw AuthException(error);
   }
 
   Future<void> markMessagesAsRead(String chatId, String lastMessageId) async {
@@ -1129,9 +1326,9 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_userKey);
-
     // Clear cache entries as well
     await CacheService.instance.deleteData(_cachedProfilesKey);
     await CacheService.instance.deleteData(_cachedGroupsKey);
   }
+
 }

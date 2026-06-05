@@ -6,8 +6,6 @@ import '../../models/auth_session.dart';
 import '../../services/auth_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/notification_service.dart';
-import '../../widgets/app_version_footer.dart';
-import '../../widgets/auth_token_footer.dart';
 import '../auth/login_page.dart';
 import '../friends/friends_list_page.dart';
 import '../groups/group_list_page.dart';
@@ -263,13 +261,6 @@ class _PlaceholderHomePageState extends State<PlaceholderHomePage> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    user.email,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyLarge?.copyWith(color: mc.textMuted),
-                  ),
                   const SizedBox(height: 24),
                   Text(
                     'Use the menu to search users, friends, groups, and settings.',
@@ -280,14 +271,6 @@ class _PlaceholderHomePageState extends State<PlaceholderHomePage> {
                   ),
                 ],
               ),
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [const AuthTokenFooter(), const AppVersionFooter()],
             ),
           ),
         ],

@@ -27,11 +27,13 @@ class Profile {
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) {
-    final flairsList =
-        (json['flairs'] as List<dynamic>?)
-            ?.map((f) => Flair.fromJson(f as Map<String, dynamic>))
-            .toList() ??
-        [];
+    final rawFlairs = json['flairs'] as List<dynamic>? ?? [];
+    final flairsList = rawFlairs.map((f) {
+      if (f is String) {
+        return Flair(id: f, name: f);
+      }
+      return Flair.fromJson(f as Map<String, dynamic>);
+    }).toList();
     return Profile(
       id: json['id'] as String,
       username: json['username'] as String,

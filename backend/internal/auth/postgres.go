@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -667,6 +668,9 @@ func (p *PostgresAuthenticator) GetGroupFlairs(groupID string) ([]models.Flair, 
 }
 
 func (p *PostgresAuthenticator) AddGroupFlair(groupID, name string) (*models.Flair, error) {
+	if strings.EqualFold(strings.TrimSpace(name), "Admin") {
+		return nil, errors.New("cannot create a flair named Admin")
+	}
 	var flairID string
 	err := p.pool.QueryRow(context.Background(),
 		"INSERT INTO public.flairs (name, group_id) VALUES ($1, $2) RETURNING id",
@@ -700,7 +704,18 @@ func (p *PostgresAuthenticator) GetMemberFlairs(groupID, userID string) ([]model
 }
 
 func (p *PostgresAuthenticator) AssignFlair(groupID, userID, flairID string) error {
-	_, err := p.pool.Exec(context.Background(),
+	var flairName string
+	err := p.pool.QueryRow(context.Background(),
+		"SELECT name FROM public.flairs WHERE id = $1", flairID,
+	).Scan(&flairName)
+	if err != nil {
+		return fmt.Errorf("failed to look up flair: %v", err)
+	}
+	if strings.EqualFold(flairName, "Admin") {
+		return errors.New("Admin flair is assigned automatically and cannot be selected")
+	}
+
+	_, err = p.pool.Exec(context.Background(),
 		"INSERT INTO public.group_member_flairs (group_id, user_id, flair_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
 		groupID, userID, flairID)
 	if err != nil {
@@ -940,10 +955,12 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 			COALESCE(
 				(SELECT COUNT(*) FROM messages m
 				 WHERE m.chat_id = c.id AND m.sender_id != $1
-				 AND NOT EXISTS (
-				   SELECT 1 FROM message_read_status mrs
-				   WHERE mrs.user_id = $1 AND mrs.chat_id = c.id
-				   AND mrs.last_read_message_id >= m.id
+				 AND m.created_at > COALESCE(
+				   (SELECT m2.created_at FROM messages m2
+				    INNER JOIN message_read_status mrs
+				      ON mrs.last_read_message_id = m2.id
+				     AND mrs.user_id = $1 AND mrs.chat_id = c.id),
+				   '1970-01-01'::timestamptz
 				 )
 				), 0
 			) as unread_count
@@ -993,7 +1010,13 @@ func (p *PostgresAuthenticator) GetGroupMembers(groupID string) ([]models.Profil
 	query := `
 		SELECT u.id, u.username, COALESCE(u.display_name, ''), u.avatar_url, COALESCE(u.bio, ''),
 			(SELECT created_by FROM public.groups WHERE id = $1) = u.id as is_creator,
-			COALESCE(array_agg(f.name ORDER BY f.name) FILTER (WHERE f.name IS NOT NULL), '{}')
+			COALESCE(
+				json_agg(
+					json_build_object('id', f.id, 'name', f.name, 'group_id', f.group_id)
+					ORDER BY f.name
+				) FILTER (WHERE f.id IS NOT NULL),
+				'[]'::json
+			)
 		FROM public.group_members gm
 		JOIN public.users u ON u.id = gm.user_id
 		LEFT JOIN public.group_member_flairs gmf ON gmf.group_id = gm.group_id AND gmf.user_id = gm.user_id
@@ -1011,12 +1034,12 @@ func (p *PostgresAuthenticator) GetGroupMembers(groupID string) ([]models.Profil
 	var profiles = []models.Profile{}
 	for rows.Next() {
 		var profile models.Profile
-		var flairNames []string
-		if err := rows.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio, &profile.IsCreator, &flairNames); err != nil {
+		var flairJSON []byte
+		if err := rows.Scan(&profile.ID, &profile.Username, &profile.DisplayName, &profile.AvatarURL, &profile.Bio, &profile.IsCreator, &flairJSON); err != nil {
 			log.Printf("Error scanning group member row: %v", err)
 			continue
 		}
-		profile.Flairs = flairNames
+		profile.Flairs = parseFlairsJSON(flairJSON)
 		profiles = append(profiles, profile)
 	}
 
@@ -1552,6 +1575,65 @@ func (p *PostgresAuthenticator) GetChatMessages(chatID string) ([]models.Message
 	return messages, rows.Err()
 }
 
+func (p *PostgresAuthenticator) GetChatMessagesPaginated(chatID string, limit int, beforeMessageID *string) ([]models.Message, error) {
+	if limit <= 0 {
+		limit = 40
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	var rows pgx.Rows
+	var err error
+
+	baseSelect := `
+		SELECT m.id, m.chat_id, m.sender_id, m.type, m.content, m.parent_message_id, m.thread_id, m.is_thread_root, m.created_at, m.updated_at,
+			COALESCE(u.display_name, u.username) as sender_name
+		FROM messages m
+		JOIN users u ON m.sender_id = u.id
+		WHERE m.chat_id = $1`
+
+	if beforeMessageID != nil && *beforeMessageID != "" {
+		query := baseSelect + `
+			AND m.created_at < (
+				SELECT created_at FROM messages WHERE id = $2 AND chat_id = $1
+			)
+			ORDER BY m.created_at DESC
+			LIMIT $3`
+		rows, err = p.pool.Query(context.Background(), query, chatID, *beforeMessageID, limit)
+	} else {
+		query := baseSelect + `
+			ORDER BY m.created_at DESC
+			LIMIT $2`
+		rows, err = p.pool.Query(context.Background(), query, chatID, limit)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chat messages: %v", err)
+	}
+	defer rows.Close()
+
+	var messages []models.Message
+	for rows.Next() {
+		var msg models.Message
+		var senderName string
+		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.SenderID, &msg.Type, &msg.Content, &msg.ParentMsgID, &msg.ThreadID, &msg.IsThreadRoot, &msg.CreatedAt, &msg.UpdatedAt, &senderName); err != nil {
+			log.Printf("Error scanning message: %v", err)
+			continue
+		}
+		msg.SenderName = senderName
+		messages = append(messages, msg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Return chronological order (oldest -> newest) for the client.
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+	return messages, nil
+}
+
 func (p *PostgresAuthenticator) getMessageByChatID(chatID, messageID string) (*models.Message, error) {
 	query := `
 		SELECT m.id, m.chat_id, m.sender_id, m.type, m.content, m.parent_message_id, m.thread_id, m.is_thread_root, m.created_at, m.updated_at,
@@ -1592,4 +1674,251 @@ func (p *PostgresAuthenticator) getMessageByID(messageID string) (*models.Messag
 	}
 	msg.MessageType = models.MessageType(messageType)
 	return &msg, nil
+}
+
+func parseFlairsJSON(data []byte) []models.Flair {
+	if len(data) == 0 {
+		return nil
+	}
+	var flairs []models.Flair
+	if err := json.Unmarshal(data, &flairs); err != nil {
+		return nil
+	}
+	return flairs
+}
+
+func (p *PostgresAuthenticator) CreatePollMessage(
+	chatID, senderID, question string,
+	options []string,
+	isMultipleChoice bool,
+	parentID, threadID *string,
+) (*models.Message, error) {
+	if strings.TrimSpace(question) == "" {
+		return nil, errors.New("poll question is required")
+	}
+	if len(options) < 2 {
+		return nil, errors.New("at least two poll options are required")
+	}
+
+	ctx := context.Background()
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var threadIDPtr, parentIDPtr *string
+	if threadID != nil && *threadID != "" {
+		threadIDPtr = threadID
+	}
+	if parentID != nil && *parentID != "" {
+		parentIDPtr = parentID
+	}
+
+	var messageID string
+	err = tx.QueryRow(ctx,
+		`INSERT INTO public.messages (chat_id, sender_id, content, parent_message_id, thread_id, type)
+		 VALUES ($1, $2, $3, $4, $5, 'poll') RETURNING id`,
+		chatID, senderID, question, parentIDPtr, threadIDPtr,
+	).Scan(&messageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create poll message: %v", err)
+	}
+
+	_, err = tx.Exec(ctx,
+		`INSERT INTO public.polls (message_id, question, is_multiple_choice) VALUES ($1, $2, $3)`,
+		messageID, question, isMultipleChoice,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create poll: %v", err)
+	}
+
+	for _, optionText := range options {
+		trimmed := strings.TrimSpace(optionText)
+		if trimmed == "" {
+			continue
+		}
+		_, err = tx.Exec(ctx,
+			`INSERT INTO public.poll_options (poll_id, option_text) VALUES ($1, $2)`,
+			messageID, trimmed,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create poll option: %v", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	message, err := p.getMessageByChatID(chatID, messageID)
+	if err != nil {
+		return nil, err
+	}
+	enriched, err := p.AttachPollDetails([]models.Message{*message}, senderID)
+	if err != nil || len(enriched) == 0 {
+		return message, err
+	}
+	return &enriched[0], nil
+}
+
+func (p *PostgresAuthenticator) VotePoll(messageID, userID, optionID string) (*models.MessagePollDetails, error) {
+	ctx := context.Background()
+
+	var isMultiple bool
+	err := p.pool.QueryRow(ctx,
+		`SELECT is_multiple_choice FROM public.polls WHERE message_id = $1`,
+		messageID,
+	).Scan(&isMultiple)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("poll not found")
+		}
+		return nil, fmt.Errorf("failed to load poll: %v", err)
+	}
+
+	var optionPollID string
+	err = p.pool.QueryRow(ctx,
+		`SELECT poll_id FROM public.poll_options WHERE id = $1`,
+		optionID,
+	).Scan(&optionPollID)
+	if err != nil || optionPollID != messageID {
+		return nil, errors.New("invalid poll option")
+	}
+
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var alreadyVoted bool
+	err = tx.QueryRow(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM public.poll_votes
+			WHERE poll_id = $1 AND user_id = $2 AND option_id = $3
+		)`,
+		messageID, userID, optionID,
+	).Scan(&alreadyVoted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing vote: %v", err)
+	}
+
+	if alreadyVoted {
+		_, err = tx.Exec(ctx,
+			`DELETE FROM public.poll_votes
+			 WHERE poll_id = $1 AND user_id = $2 AND option_id = $3`,
+			messageID, userID, optionID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to remove vote: %v", err)
+		}
+	} else {
+		if !isMultiple {
+			_, err = tx.Exec(ctx,
+				`DELETE FROM public.poll_votes WHERE poll_id = $1 AND user_id = $2`,
+				messageID, userID,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to reset votes: %v", err)
+			}
+		}
+
+		_, err = tx.Exec(ctx,
+			`INSERT INTO public.poll_votes (poll_id, option_id, user_id)
+			 VALUES ($1, $2, $3)`,
+			messageID, optionID, userID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to record vote: %v", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	details, err := p.getPollDetails(messageID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return details, nil
+}
+
+func (p *PostgresAuthenticator) getPollDetails(messageID, viewerUserID string) (*models.MessagePollDetails, error) {
+	ctx := context.Background()
+
+	var question string
+	var isMultiple bool
+	err := p.pool.QueryRow(ctx,
+		`SELECT question, is_multiple_choice FROM public.polls WHERE message_id = $1`,
+		messageID,
+	).Scan(&question, &isMultiple)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := p.pool.Query(ctx, `
+		SELECT po.id, po.option_text,
+			(SELECT COUNT(*)::int FROM public.poll_votes pv WHERE pv.option_id = po.id) AS vote_count
+		FROM public.poll_options po
+		WHERE po.poll_id = $1
+		ORDER BY po.option_text ASC
+	`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	options := []models.PollOptionWithVotes{}
+	for rows.Next() {
+		var opt models.PollOptionWithVotes
+		if err := rows.Scan(&opt.ID, &opt.OptionText, &opt.VoteCount); err != nil {
+			continue
+		}
+		options = append(options, opt)
+	}
+
+	myVotes := []string{}
+	if viewerUserID != "" {
+		voteRows, err := p.pool.Query(ctx,
+			`SELECT option_id FROM public.poll_votes WHERE poll_id = $1 AND user_id = $2`,
+			messageID, viewerUserID,
+		)
+		if err == nil {
+			defer voteRows.Close()
+			for voteRows.Next() {
+				var optionID string
+				if err := voteRows.Scan(&optionID); err == nil {
+					myVotes = append(myVotes, optionID)
+				}
+			}
+		}
+	}
+
+	return &models.MessagePollDetails{
+		MessageID:        messageID,
+		Question:         question,
+		IsMultipleChoice: isMultiple,
+		Options:          options,
+		MyVoteOptionIDs:  myVotes,
+	}, nil
+}
+
+func (p *PostgresAuthenticator) AttachPollDetails(messages []models.Message, viewerUserID string) ([]models.Message, error) {
+	for i := range messages {
+		if messages[i].Type != models.MessageTypePoll {
+			continue
+		}
+		details, err := p.getPollDetails(messages[i].ID, viewerUserID)
+		if err != nil {
+			log.Printf("Failed to load poll for message %s: %v", messages[i].ID, err)
+			continue
+		}
+		messages[i].Poll = details
+		if messages[i].Content == "" {
+			messages[i].Content = details.Question
+		}
+	}
+	return messages, nil
 }

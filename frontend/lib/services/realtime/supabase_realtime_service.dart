@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/notification.dart';
 import '../../models/message.dart';
@@ -94,15 +95,27 @@ class SupabaseRealtimeService implements RealtimeService {
     );
 
     channel.subscribe((status, err) {
+      if (err != null) {
+        debugPrint('Chat realtime subscribe error ($chatId): $err');
+      }
       if (!completer.isCompleted) {
         completer.complete(status);
       }
     });
 
-    final status = await completer.future;
-    if (status.toString().contains('timedOut')) {
+    final status = await completer.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => RealtimeSubscribeStatus.timedOut,
+    );
+    if (status != RealtimeSubscribeStatus.subscribed) {
+      debugPrint('Chat realtime status for $chatId: $status');
       await Future.delayed(const Duration(seconds: 2));
-      channel.subscribe((_, _) {});
+      channel.subscribe((retryStatus, retryErr) {
+        if (retryErr != null) {
+          debugPrint('Chat realtime retry error ($chatId): $retryErr');
+        }
+        debugPrint('Chat realtime retry status ($chatId): $retryStatus');
+      });
     }
   }
 

@@ -6,6 +6,8 @@ import '../../models/profile.dart';
 import '../../services/auth_service.dart';
 import '../../services/cache_service.dart';
 import '../../widgets/mitron_button.dart';
+import '../../widgets/mitron_app_bar.dart';
+import 'group_flairs_sheet.dart';
 
 class GroupDetailsPage extends StatefulWidget {
   final Group group;
@@ -26,6 +28,7 @@ class GroupDetailsPage extends StatefulWidget {
 
 class _GroupDetailsPageState extends State<GroupDetailsPage> {
   List<Profile> _members = [];
+  List<Flair> _availableFlairs = [];
   bool _isLoading = true;
   String? _error;
   bool _isEditing = false;
@@ -57,6 +60,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
       final members = await AuthService.instance.getGroupMembers(
         widget.group.id,
       );
+      final flairs = await AuthService.instance.getGroupFlairs(widget.group.id);
       final currentUserId = AuthService.instance.currentUser?.id;
       members.sort((a, b) {
         if (a.id == currentUserId) return -1;
@@ -65,6 +69,7 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
       });
       setState(() {
         _members = members;
+        _availableFlairs = flairs;
         _isLoading = false;
       });
       widget.onMembersUpdated?.call();
@@ -120,6 +125,19 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showManageMyFlairs(Profile member) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => GroupFlairsSheet(
+        groupId: widget.group.id,
+        member: member,
+        availableFlairs: _availableFlairs,
+        onUpdated: _loadGroupData,
       ),
     );
   }
@@ -343,8 +361,8 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
     final currentUserId = AuthService.instance.currentUser?.id;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Group Details'),
+      appBar: MitronAppBar(
+        title: 'Group Details',
         actions: [
           if (_isCreator)
             IconButton(
@@ -441,6 +459,11 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                         isCreator: isMemberCreator,
                         isAdmin: _isCreator,
                         onKickMember: () => _showKickMemberDialog(member),
+                        onManageFlairs: isCurrentUser
+                            ? () => _showManageMyFlairs(member)
+                            : null,
+                        showMemberMenu:
+                            isCurrentUser || (_isCreator && !isCurrentUser),
                       );
                     },
                   ),
@@ -469,6 +492,8 @@ class _MemberTile extends StatelessWidget {
   final bool isCreator;
   final bool isAdmin;
   final VoidCallback onKickMember;
+  final VoidCallback? onManageFlairs;
+  final bool showMemberMenu;
 
   const _MemberTile({
     required this.member,
@@ -476,6 +501,8 @@ class _MemberTile extends StatelessWidget {
     required this.isCreator,
     required this.isAdmin,
     required this.onKickMember,
+    this.onManageFlairs,
+    this.showMemberMenu = false,
   });
 
   @override
@@ -566,26 +593,34 @@ class _MemberTile extends StatelessWidget {
               ],
             ),
           ),
-          if (isAdmin && !isCurrentUser)
+          if (showMemberMenu)
             PopupMenuButton<String>(
               icon: Icon(
                 Icons.more_vert,
-                color: theme.colorScheme.onSurfaceVariant,
+                color: theme.colorScheme.onSurface,
               ),
               offset: const Offset(0, 40),
               onSelected: (value) {
                 if (value == 'kick') {
                   onKickMember();
+                } else if (value == 'flairs') {
+                  onManageFlairs?.call();
                 }
               },
               itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'kick',
-                  child: Text(
-                    'Kick member',
-                    style: TextStyle(color: theme.colorScheme.error),
+                if (onManageFlairs != null)
+                  const PopupMenuItem(
+                    value: 'flairs',
+                    child: Text('Add flairs'),
                   ),
-                ),
+                if (isAdmin && !isCurrentUser)
+                  PopupMenuItem(
+                    value: 'kick',
+                    child: Text(
+                      'Kick member',
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
+                  ),
               ],
             ),
         ],

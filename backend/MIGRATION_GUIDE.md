@@ -112,3 +112,15 @@ func NewWebSocketNotifier() *WebSocketNotifier {
 | `GOOGLE_APPLICATION_CREDENTIALS` | No* | Path to service account JSON (*required if FCM_PROJECT_ID set) |
 | `ONESIGNAL_APP_ID` | No* | OneSignal app ID (*use instead of FCM) |
 | `ONESIGNAL_API_KEY` | No* | OneSignal API key (*use instead of FCM) |
+
+
+## Realtime (Flutter + Cloudflare Pages)
+
+The app uses the Supabase **anon key** for Realtime (`postgres_changes` on `messages` / `notifications`). This matches the previous setup: no backend JWT is sent to Supabase, and you do **not** need to align `JWT_SECRET` with Supabase’s JWT secret.
+
+Requirements:
+
+- Realtime enabled for `messages` and `notifications` in the Supabase dashboard.
+- RLS policies (or table settings) must allow anon Realtime subscriptions if you use RLS.
+
+**Web:** If live updates are unreliable in the browser, chat polls every 3s as a fallback. **Android/iOS** rely on Realtime only (8s poll is a light backup).

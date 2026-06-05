@@ -4,7 +4,9 @@ import '../../core/theme/mitron_colors.dart';
 import '../../models/auth_user.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
+import '../../widgets/app_version_footer.dart';
 import '../../widgets/theme_picker_button.dart';
+import '../../widgets/mitron_app_bar.dart';
 import '../auth/login_page.dart';
 import 'update_profile_page.dart';
 
@@ -77,7 +79,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final mc = MitronColors.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: MitronAppBar(title: 'Settings'),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 12),
         children: [
@@ -159,6 +161,9 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(color: Colors.redAccent),
             ),
           ),
+          const SizedBox(height: 32),
+          const Center(child: AppVersionFooter()),
+          const SizedBox(height: 24),
         ],
       ),
     );

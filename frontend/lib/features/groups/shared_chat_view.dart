@@ -1,8 +1,13 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/message.dart';
+import '../../models/poll.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 import 'chat_message_list.dart';
+import 'poll_message_bubble.dart';
 
 /// Shared group/event chat body: loads messages, realtime, send, and date dividers.
 class ChatMessagesPanel extends StatefulWidget {
@@ -23,6 +28,8 @@ class ChatMessagesPanel extends StatefulWidget {
   final String? initialThreadRootId;
   final Message? initialThreadRootMessage;
 
+  static const int pageSize = 40;
+
   @override
   State<ChatMessagesPanel> createState() => ChatMessagesPanelState();
 }
@@ -34,12 +41,15 @@ class ChatMessagesPanelState extends State<ChatMessagesPanel> {
   List<Message> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
+  bool _isLoadingMore = false;
+  bool _hasMoreHistory = true;
   bool _isMarkingRead = false;
   String? _lastMarkedMessageId;
   Message? _selectedMessage;
   Message? _replyToMessage;
   String? _activeThreadRootId;
   Message? _threadRootMessage;
+  Timer? _pollTimer;
 
   Message? get lastMessage => _messages.isEmpty ? null : _messages.last;
 
@@ -48,19 +58,74 @@ class ChatMessagesPanelState extends State<ChatMessagesPanel> {
     super.initState();
     _activeThreadRootId = widget.initialThreadRootId;
     _threadRootMessage = widget.initialThreadRootMessage;
+    _scrollController.addListener(_onScroll);
     _cacheGroupMemberNames();
-    _loadMessages();
+    _loadInitialMessages();
     _subscribeToRealtimeMessages();
+    _startMessagePolling();
+  }
+
+  void _startMessagePolling() {
+    final interval = kIsWeb
+        ? const Duration(seconds: 3)
+        : const Duration(seconds: 8);
+    _pollTimer = Timer.periodic(interval, (_) => _pollNewMessages());
+  }
+
+  Future<void> _pollNewMessages() async {
+    if (!mounted || _isLoading) return;
+    try {
+      final page = await AuthService.instance.getMessagesPage(
+        widget.chatId,
+        limit: ChatMessagesPanel.pageSize,
+      );
+      if (!mounted) return;
+      var merged = _messages;
+      var changed = false;
+      for (final message in page.messages) {
+        final beforeLen = merged.length;
+        merged = appendChatMessage(merged, message);
+        if (merged.length != beforeLen) changed = true;
+      }
+      if (changed) {
+        setState(() => _messages = refreshMessageSenders(merged));
+        final latest = merged.isEmpty ? null : merged.last;
+        if (latest != null &&
+            latest.senderId != AuthService.instance.currentUser?.id) {
+          _markVisibleMessagesAsRead(latest.id);
+        }
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
+    final latest = lastMessage;
+    if (latest != null) {
+      AuthService.instance.markMessagesAsRead(widget.chatId, latest.id);
+      AuthService.instance.updateCachedGroupUnreadCount(widget.groupId, 0);
+    }
     _messageController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     NotificationService.instance.realtimeService.unsubscribeFromChatMessages(
       widget.chatId,
     );
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients ||
+        _isLoadingMore ||
+        !_hasMoreHistory ||
+        _isLoading) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 120) {
+      _loadOlderMessages();
+    }
   }
 
   Future<void> _cacheGroupMemberNames() async {
@@ -84,9 +149,6 @@ class ChatMessagesPanelState extends State<ChatMessagesPanel> {
         if (newMessage.senderId != currentUserId) {
           _markVisibleMessagesAsRead(newMessage.id);
         }
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          scrollChatToBottom(_scrollController);
-        });
       },
     );
   }
@@ -106,25 +168,118 @@ class ChatMessagesPanelState extends State<ChatMessagesPanel> {
     }
   }
 
-  Future<void> _loadMessages() async {
+  Future<void> _loadInitialMessages() async {
     try {
-      final messages = await AuthService.instance.getMessages(widget.chatId);
+      final page = await AuthService.instance.getMessagesPage(
+        widget.chatId,
+        limit: ChatMessagesPanel.pageSize,
+      );
       if (!mounted) return;
       setState(() {
-        _messages = refreshMessageSenders(messages);
+        _messages = refreshMessageSenders(page.messages);
+        _hasMoreHistory = page.hasMore;
         if (_activeThreadRootId != null) {
           _threadRootMessage = _findMessageById(_activeThreadRootId!);
         }
         _isLoading = false;
       });
-      if (messages.isNotEmpty) {
-        await _markVisibleMessagesAsRead(messages.last.id);
+      if (page.messages.isNotEmpty) {
+        await _markVisibleMessagesAsRead(page.messages.last.id);
       }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        scrollChatToBottom(_scrollController);
-      });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    final visible = _visibleMessages();
+    if (visible.isEmpty || _isLoadingMore) return;
+
+    setState(() => _isLoadingMore = true);
+    final previousMaxExtent = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent
+        : 0.0;
+    final previousOffset = _scrollController.hasClients
+        ? _scrollController.position.pixels
+        : 0.0;
+
+    try {
+      final page = await AuthService.instance.getMessagesPage(
+        widget.chatId,
+        beforeMessageId: visible.first.id,
+        limit: ChatMessagesPanel.pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        _messages = refreshMessageSenders(
+          mergeOlderMessages(_messages, page.messages),
+        );
+        _hasMoreHistory = page.hasMore;
+        _isLoadingMore = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollController.hasClients) return;
+        final newMaxExtent = _scrollController.position.maxScrollExtent;
+        _scrollController.jumpTo(
+          previousOffset + (newMaxExtent - previousMaxExtent),
+        );
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
+  Future<void> _votePoll(String messageId, String optionId) async {
+    try {
+      final poll = await AuthService.instance.votePoll(messageId, optionId);
+      if (!mounted) return;
+      setState(() {
+        _messages = _messages.map((m) {
+          if (m.id == messageId) {
+            return m.copyWith(poll: poll);
+          }
+          return m;
+        }).toList();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Vote failed: $e')),
+      );
+    }
+  }
+
+  Future<void> _showCreatePollSheet() async {
+    final result = await showModalBottomSheet<CreatePollRequest>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => const CreatePollSheet(),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() => _isSending = true);
+    try {
+      final message = await AuthService.instance.sendPollMessage(
+        groupId: widget.groupId,
+        question: result.question,
+        options: result.options,
+        isMultipleChoice: result.isMultipleChoice,
+        eventId: widget.eventId,
+      );
+      if (!mounted) return;
+      final pollMessage = message.type == 'poll'
+          ? message
+          : message.copyWith(type: 'poll');
+      setState(() {
+        _messages = appendChatMessage(_messages, pollMessage);
+        _isSending = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSending = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to create poll: $e')));
     }
   }
 
@@ -150,9 +305,6 @@ class ChatMessagesPanelState extends State<ChatMessagesPanel> {
         _messageController.clear();
         _replyToMessage = null;
         _isSending = false;
-      });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        scrollChatToBottom(_scrollController);
       });
     } catch (e) {
       if (!mounted) return;
@@ -180,50 +332,92 @@ class ChatMessagesPanelState extends State<ChatMessagesPanel> {
               ? const Center(child: CircularProgressIndicator())
               : visibleMessages.isEmpty
               ? Center(child: Text(widget.emptyMessage))
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: listEntries.length,
-                  itemBuilder: (context, index) {
-                    final entry = listEntries[index];
-                    switch (entry) {
-                      case ChatDateSeparatorEntry(:final date):
-                        return ChatDateDivider(
-                          label: formatChatDateLabel(date),
-                        );
-                      case ChatMessageEntry(:final message):
-                        final isMe = message.senderId == currentUserId;
-                        final parent = message.parentId == null
-                            ? null
-                            : _findMessageById(message.parentId!);
-                        final threadReplyCount =
-                            threadReplyCountByRootId[message.id] ?? 0;
-                        return ChatMessageBubble(
-                          sender: isMe ? 'You' : message.senderName,
-                          text: message.content,
-                          isMe: isMe,
-                          timestamp: message.createdAt,
-                          isSelected: _selectedMessage?.id == message.id,
-                          onLongPress: () => _onLongPressMessage(message),
-                          replyPreview: parent == null
-                              ? null
-                              : '${parent.senderName}: ${parent.content}',
-                          threadReplyCount: threadReplyCount,
-                          onOpenThread: threadReplyCount > 0
-                              ? () => _openThread(message.id, message)
-                              : null,
-                          isThreadContext: _activeThreadRootId != null,
-                        );
-                    }
-                  },
+              : Stack(
+                  children: [
+                    ListView.builder(
+                      controller: _scrollController,
+                      reverse: true,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: listEntries.length,
+                      itemBuilder: (context, index) {
+                        final entry =
+                            listEntries[listEntries.length - 1 - index];
+                        switch (entry) {
+                          case ChatDateSeparatorEntry(:final date):
+                            return ChatDateDivider(
+                              label: formatChatDateLabel(date),
+                            );
+                          case ChatMessageEntry(:final message):
+                            final isMe = message.senderId == currentUserId;
+                            final parent = message.parentId == null
+                                ? null
+                                : _findMessageById(message.parentId!);
+                            final threadReplyCount =
+                                threadReplyCountByRootId[message.id] ?? 0;
+                            if (message.isPoll) {
+                              return PollMessageBubble(
+                                message: message,
+                                poll: _pollForMessage(message),
+                                isMe: isMe,
+                                senderLabel: isMe ? 'You' : message.senderName,
+                                isSelected:
+                                    _selectedMessage?.id == message.id,
+                                onLongPress: () => _onLongPressMessage(message),
+                                onVote: (optionId) =>
+                                    _votePoll(message.id, optionId),
+                              );
+                            }
+                            return ChatMessageBubble(
+                              sender: isMe ? 'You' : message.senderName,
+                              text: message.content,
+                              isMe: isMe,
+                              timestamp: message.createdAt,
+                              isSelected: _selectedMessage?.id == message.id,
+                              onLongPress: () => _onLongPressMessage(message),
+                              replyPreview: parent == null
+                                  ? null
+                                  : '${parent.senderName}: ${parent.content}',
+                              threadReplyCount: threadReplyCount,
+                              onOpenThread: threadReplyCount > 0
+                                  ? () => _openThread(message.id, message)
+                                  : null,
+                              isThreadContext: _activeThreadRootId != null,
+                            );
+                        }
+                      },
+                    ),
+                    if (_isLoadingMore)
+                      const Positioned(
+                        top: 8,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
         ),
         ChatMessageInput(
           controller: _messageController,
           onSend: _sendMessage,
+          onCreatePoll: _showCreatePollSheet,
           isLoading: _isSending,
         ),
       ],
+    );
+  }
+
+  MessagePoll _pollForMessage(Message message) {
+    if (message.poll != null) return message.poll!;
+    return MessagePoll(
+      messageId: message.id,
+      question: message.content,
+      options: const [],
     );
   }
 
@@ -272,9 +466,6 @@ class ChatMessagesPanelState extends State<ChatMessagesPanel> {
       _threadRootMessage = rootMessage;
       _selectedMessage = null;
       _replyToMessage = null;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      scrollChatToBottom(_scrollController);
     });
   }
 

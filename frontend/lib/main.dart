@@ -49,7 +49,9 @@ Future<void> main() async {
     }
   }
 
-  // Initialize Supabase
+  // Realtime uses the anon key (RLS disabled on subscribed tables). Do not pass
+  // the backend JWT here — Supabase validates it with its own JWT rules and
+  // rejects it (InvalidJWT / exp), which breaks Realtime and can log users out.
   await Supabase.initialize(
     url: ApiConstants.supabaseUrl,
     anonKey: ApiConstants.supabaseAnonKey,

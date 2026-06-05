@@ -24,8 +24,8 @@ type Profile struct {
 	DisplayName *string  `json:"display_name"`
 	AvatarURL   *string  `json:"avatar_url"`
 	Bio         *string  `json:"bio"`
-	IsCreator   bool     `json:"is_creator,omitempty"`
-	Flairs      []string `json:"flairs,omitempty"`
+	IsCreator   bool    `json:"is_creator,omitempty"`
+	Flairs      []Flair `json:"flairs,omitempty"`
 }
 
 type ProfileWithStatus struct {
@@ -119,7 +119,8 @@ type Message struct {
 	IsThreadRoot bool        `json:"is_thread_root"`
 	CreatedAt    time.Time   `json:"created_at"`
 	UpdatedAt    *time.Time  `json:"updated_at,omitempty"`
-	MessageType  MessageType `json:"message_type"`
+	MessageType  MessageType        `json:"message_type"`
+	Poll         *MessagePollDetails `json:"poll,omitempty"`
 }
 
 type Poll struct {
@@ -138,6 +139,20 @@ type PollVote struct {
 	PollID   string `json:"poll_id"`
 	OptionID string `json:"option_id"`
 	UserID   string `json:"user_id"`
+}
+
+type PollOptionWithVotes struct {
+	ID         string `json:"id"`
+	OptionText string `json:"option_text"`
+	VoteCount  int    `json:"vote_count"`
+}
+
+type MessagePollDetails struct {
+	MessageID        string                `json:"message_id"`
+	Question         string                `json:"question"`
+	IsMultipleChoice bool                  `json:"is_multiple_choice"`
+	Options          []PollOptionWithVotes `json:"options"`
+	MyVoteOptionIDs  []string              `json:"my_vote_option_ids,omitempty"`
 }
 
 type MessageMedia struct {

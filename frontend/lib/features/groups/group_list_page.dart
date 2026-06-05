@@ -7,6 +7,7 @@ import 'package:mitron/services/cache_service.dart';
 import 'create_group_page.dart';
 import 'join_group_page.dart';
 import 'group_chat_page.dart';
+import '../../widgets/mitron_app_bar.dart';
 
 class GroupListPage extends StatefulWidget {
   const GroupListPage({super.key});
@@ -126,8 +127,8 @@ class _GroupListPageState extends State<GroupListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Groups'),
+      appBar: MitronAppBar(
+        title: 'My Groups',
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -271,14 +272,21 @@ class _GroupListPageState extends State<GroupListPage> {
                             )
                           : null,
                       onTap: () async {
+                        final groupId = group.id;
                         setState(() {
                           _groups[index] = group.copyWith(unreadCount: 0);
                         });
+                        await AuthService.instance.updateCachedGroupUnreadCount(
+                          groupId,
+                          0,
+                        );
+                        if (!context.mounted) return;
                         await Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => GroupChatPage(group: group),
                           ),
                         );
+                        if (!mounted) return;
                         await _refreshInBackground();
                       },
                     ),

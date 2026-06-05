@@ -39,6 +39,9 @@ class ApiConstants {
   static const String deleteGroup = '/groups/delete';
   static const String addGroupMember = '/groups/add-member';
   static const String removeGroupMember = '/groups/remove-member';
+  static const String groupFlairs = '/groups/flairs';
+  static const String assignGroupFlair = '/groups/flairs/assign';
+  static const String removeGroupFlair = '/groups/flairs/remove';
 
   // Image Endpoints
   static const String generateImage = '/generate-image';
@@ -47,10 +50,12 @@ class ApiConstants {
   static const String sendMessage = '/messages/send';
   static const String getMessages = '/messages';
   static const String markMessagesRead = '/messages/read';
+  static const String votePoll = '/polls/vote';
 
   // Event Endpoints
   static const String createEvent = '/events/create';
   static const String getEvents = '/events';
+  static const String eventDetail = '/events/detail';
   static const String resolveEvent = '/events/resolve';
   static const String deleteEvent = '/events/delete';
   static const String updateEvent = '/events/update';

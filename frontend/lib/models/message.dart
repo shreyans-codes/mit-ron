@@ -1,3 +1,5 @@
+import 'poll.dart';
+
 class Message {
   final String id;
   final String? groupId;
@@ -10,6 +12,7 @@ class Message {
   final String? parentId;
   final bool isThreadRoot;
   final DateTime createdAt;
+  final MessagePoll? poll;
 
   Message({
     required this.id,
@@ -23,7 +26,10 @@ class Message {
     this.parentId,
     this.isThreadRoot = false,
     required this.createdAt,
+    this.poll,
   });
+
+  bool get isPoll => type == 'poll';
 
   static DateTime _parseCreatedAt(dynamic value) {
     if (value is DateTime) {
@@ -38,6 +44,11 @@ class Message {
   factory Message.fromJson(Map<String, dynamic> json) {
     final rawSenderName = json['sender_name'] ?? json['senderName'];
     final senderName = rawSenderName?.toString() ?? 'Unknown';
+    final type = (json['type'] ?? json['message_type'] ?? 'text').toString();
+    MessagePoll? poll;
+    if (json['poll'] is Map<String, dynamic>) {
+      poll = MessagePoll.fromJson(json['poll'] as Map<String, dynamic>);
+    }
     return Message(
       id: json['id'].toString(),
       groupId: json['group_id']?.toString(),
@@ -45,13 +56,14 @@ class Message {
       senderId: json['sender_id'].toString(),
       senderName: senderName,
       content: (json['content'] ?? '') as String,
-      type: (json['type'] ?? 'text') as String,
+      type: type,
       threadId: json['thread_id']?.toString(),
       parentId: json['parent_id']?.toString(),
       isThreadRoot:
           json['is_thread_root'] == true ||
           json['is_thread_root']?.toString() == 'true',
       createdAt: _parseCreatedAt(json['created_at']),
+      poll: poll,
     );
   }
 
@@ -89,6 +101,7 @@ class Message {
     String? parentId,
     bool? isThreadRoot,
     DateTime? createdAt,
+    MessagePoll? poll,
   }) {
     return Message(
       id: id ?? this.id,
@@ -102,6 +115,7 @@ class Message {
       parentId: parentId ?? this.parentId,
       isThreadRoot: isThreadRoot ?? this.isThreadRoot,
       createdAt: createdAt ?? this.createdAt,
+      poll: poll ?? this.poll,
     );
   }
 }
