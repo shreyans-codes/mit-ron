@@ -21,7 +21,7 @@ import 'models/group.dart';
 import 'features/settings/update_profile_page.dart';
 import 'features/users/profile/user_profile_page.dart'; // Import UserProfilePage
 import 'features/users/search/user_search_page.dart'; // Import UserSearchPage
-import 'features/shell/placeholder_home_page.dart';
+import 'features/shell/main_shell_page.dart';
 
 import 'services/cache_service.dart';
 import 'services/notification_service.dart';
@@ -74,7 +74,9 @@ Future<void> main() async {
   // Initialize Notification Service
   await NotificationService.instance.initialize();
   NotificationService.instance.setRealtimeService(SupabaseRealtimeService());
-  await NotificationService.instance.ensurePushRegistration();
+  if (!kIsWeb) {
+    await NotificationService.instance.ensurePushRegistration();
+  }
 
   runApp(MitronApp(themeController: themeController));
 }
@@ -109,7 +111,7 @@ class MitronApp extends StatelessWidget {
               return child ?? const SizedBox.shrink();
             },
             initialRoute: isAuthenticated
-                ? PlaceholderHomePage.routeName
+                ? MainShellPage.routeName
                 : LoginPage.routeName,
             onGenerateRoute: (settings) {
               // Handle onboarding route
@@ -125,7 +127,7 @@ class MitronApp extends StatelessWidget {
               SignUpPage.routeName: (_) => const SignUpPage(),
               SettingsPage.routeName: (_) => const SettingsPage(),
               UpdateProfilePage.routeName: (_) => const UpdateProfilePage(),
-              PlaceholderHomePage.routeName: (_) => const PlaceholderHomePage(),
+              MainShellPage.routeName: (_) => const MainShellPage(),
               OnboardingPage.routeName: (_) => const OnboardingPage(),
               UserSearchPage.routeName: (_) => const UserSearchPage(),
               UserProfilePage.routeName: (context) {

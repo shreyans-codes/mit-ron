@@ -760,11 +760,12 @@ func (p *PostgresAuthenticator) CreateEvent(groupID, title, description, creator
 
 func (p *PostgresAuthenticator) GetEvents(groupID string) ([]models.Event, error) {
 	rows, err := p.pool.Query(context.Background(),
-		`SELECT e.id, e.group_id, e.title, COALESCE(e.description, ''), e.created_by, e.created_at, e.resolution_message_id, c.id
+		`SELECT e.id, e.group_id, e.title, COALESCE(e.description, ''), e.created_by, e.created_at, e.resolution_message_id, c.id,
+		        COALESCE(c.last_activity_at, e.created_at)
 		 FROM events e
 		 LEFT JOIN chats c ON c.event_id = e.id AND c.type = 'event'
 		 WHERE e.group_id = $1
-		 ORDER BY e.created_at DESC`,
+		 ORDER BY COALESCE(c.last_activity_at, e.created_at) DESC`,
 		groupID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events: %v", err)
@@ -775,13 +776,16 @@ func (p *PostgresAuthenticator) GetEvents(groupID string) ([]models.Event, error
 	for rows.Next() {
 		var event models.Event
 		var chatID string
-		if err := rows.Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatedBy, &event.CreatedAt, &event.ResolutionMsgID, &chatID); err != nil {
+		var lastActivity time.Time
+		if err := rows.Scan(&event.ID, &event.GroupID, &event.Title, &event.Description, &event.CreatedBy, &event.CreatedAt, &event.ResolutionMsgID, &chatID, &lastActivity); err != nil {
 			log.Printf("Error scanning event row: %v", err)
 			continue
 		}
 		if chatID != "" {
 			event.ChatID = &chatID
 		}
+		t := lastActivity.Format(time.RFC3339)
+		event.LastActivityAt = &t
 		events = append(events, event)
 	}
 	return events, rows.Err()
@@ -949,6 +953,7 @@ func (p *PostgresAuthenticator) DeleteEvent(eventID string) error {
 func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, error) {
 	query := `
 		SELECT g.id, g.name, COALESCE(g.description, ''), g.created_by, g.created_at,
+			COALESCE(g.group_image_url, ''),
 			(SELECT COUNT(*) FROM public.group_members WHERE group_id = g.id) AS member_count,
 			c.id,
 			COALESCE(c.last_activity_at, g.created_at) as last_activity,
@@ -980,16 +985,20 @@ func (p *PostgresAuthenticator) GetMyGroups(userID string) ([]models.Group, erro
 	for rows.Next() {
 		var group models.Group
 		var memberCount int
+		var groupImageURL string
 		var chatID *string // Make chatID nullable
 		var lastActivity *time.Time
 		var unreadCount int
 		var createdBy *string // Make createdBy nullable for scanning
-		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &createdBy, &group.CreatedAt, &memberCount, &chatID, &lastActivity, &unreadCount); err != nil {
+		if err := rows.Scan(&group.ID, &group.Name, &group.Description, &createdBy, &group.CreatedAt, &groupImageURL, &memberCount, &chatID, &lastActivity, &unreadCount); err != nil {
 			log.Printf("Error scanning group row: %v", err)
 			continue
 		}
 		group.MemberCount = memberCount
 		group.CreatedBy = createdBy
+		if groupImageURL != "" {
+			group.GroupImageURL = &groupImageURL
+		}
 		group.ChatID = chatID
 		if lastActivity != nil {
 			t := lastActivity.Format(time.RFC3339)

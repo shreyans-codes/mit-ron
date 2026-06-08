@@ -7,9 +7,11 @@ import 'package:mitron/services/cache_service.dart';
 import '../profile/user_profile_page.dart';
 
 class UserSearchPage extends StatefulWidget {
-  const UserSearchPage({super.key});
+  const UserSearchPage({super.key, this.shellMode = false});
 
   static const routeName = '/user-search';
+
+  final bool shellMode;
 
   @override
   State<UserSearchPage> createState() => _UserSearchPageState();
@@ -90,53 +92,56 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Search Users')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search by username or name...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          _performSearch(); // Clear results when text is cleared
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+    final body = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search by username or name...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        _performSearch();
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              onChanged: (value) {
-                // Trigger search on text change, maybe with debounce in a real app
-                _performSearch();
+            ),
+            onChanged: (value) {
+              _performSearch();
+            },
+          ),
+        ),
+        if (_isLoading)
+          const Expanded(child: Center(child: CircularProgressIndicator()))
+        else if (_errorMessage != null)
+          Expanded(child: Center(child: Text('Error: $_errorMessage')))
+        else if (_searchResults.isEmpty && _searchController.text.isNotEmpty)
+          const Expanded(child: Center(child: Text('No users found.')))
+        else
+          Expanded(
+            child: ListView.builder(
+              itemCount: _searchResults.length,
+              itemBuilder: (context, index) {
+                return _buildProfileCard(_searchResults[index]);
               },
             ),
           ),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (_errorMessage != null)
-            Center(child: Text('Error: $_errorMessage'))
-          else if (_searchResults.isEmpty && _searchController.text.isNotEmpty)
-            const Center(child: Text('No users found.'))
-          else
-            Expanded(
-              child: ListView.builder(
-                itemCount: _searchResults.length,
-                itemBuilder: (context, index) {
-                  return _buildProfileCard(_searchResults[index]);
-                },
-              ),
-            ),
-        ],
-      ),
+      ],
+    );
+
+    if (widget.shellMode) return body;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Search Users')),
+      body: body,
     );
   }
 }

@@ -7,6 +7,7 @@ class Event {
   final DateTime createdAt;
   final String? resolutionMessageId;
   final String? chatId;
+  final String? lastActivityAt;
 
   Event({
     required this.id,
@@ -17,6 +18,7 @@ class Event {
     required this.createdAt,
     this.resolutionMessageId,
     this.chatId,
+    this.lastActivityAt,
   });
 
   factory Event.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class Event {
       createdAt: DateTime.parse(json['created_at'] as String),
       resolutionMessageId: json['resolution_message_id'] as String?,
       chatId: json['chat_id'] as String?,
+      lastActivityAt: json['last_activity_at'] as String?,
     );
   }
 

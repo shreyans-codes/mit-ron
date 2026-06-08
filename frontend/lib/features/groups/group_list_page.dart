@@ -1,9 +1,8 @@
 // frontend/lib/features/groups/group_list_page.dart
 import 'package:flutter/material.dart';
-import 'package:mitron/core/utils/platform_image_provider.dart';
 import 'package:mitron/models/group.dart';
 import 'package:mitron/services/auth_service.dart';
-import 'package:mitron/services/cache_service.dart';
+import 'package:mitron/widgets/group_avatar.dart';
 import 'create_group_page.dart';
 import 'join_group_page.dart';
 import 'group_chat_page.dart';
@@ -188,26 +187,7 @@ class _GroupListPageState extends State<GroupListPage> {
                       vertical: 8,
                     ),
                     child: ListTile(
-                      leading: FutureBuilder<String?>(
-                        future: CacheService.instance.getGroupImageLocalPath(
-                          group.id,
-                        ),
-                        builder: (context, snapshot) {
-                          final localPath = snapshot.data;
-                          if (localPath != null && localPath.isNotEmpty) {
-                            return CircleAvatar(
-                              backgroundImage: platformImageProvider(localPath),
-                            );
-                          }
-                          return CircleAvatar(
-                            child: Text(
-                              group.name.isNotEmpty
-                                  ? group.name[0].toUpperCase()
-                                  : 'G',
-                            ),
-                          );
-                        },
-                      ),
+                      leading: GroupAvatar(group: group),
                       title: Row(
                         children: [
                           if (group.unreadCount > 0)

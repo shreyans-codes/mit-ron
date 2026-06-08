@@ -86,6 +86,7 @@ type Event struct {
 	CreatedAt       time.Time `json:"created_at"`
 	ResolutionMsgID *string   `json:"resolution_message_id"`
 	ChatID          *string   `json:"chat_id,omitempty"`
+	LastActivityAt  *string   `json:"last_activity_at,omitempty"`
 }
 
 type Chat struct {

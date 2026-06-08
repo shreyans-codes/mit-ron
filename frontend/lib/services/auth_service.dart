@@ -39,6 +39,7 @@ class AuthService {
   bool get isAuthenticated => _token != null;
 
   Function()? on401Redirect;
+  bool _handlingUnauthorized = false;
 
   static String displayNameForProfile(Profile profile) =>
       profile.displayName.isNotEmpty ? profile.displayName : profile.username;
@@ -89,24 +90,84 @@ class AuthService {
     return messages.map(enrichMessage).toList();
   }
 
+  Future<void> handleUnauthorized() async {
+    if (_handlingUnauthorized || _token == null) return;
+    _handlingUnauthorized = true;
+    try {
+      developer.log('Session expired, clearing local session');
+      await _clearSession();
+      on401Redirect?.call();
+    } finally {
+      _handlingUnauthorized = false;
+    }
+  }
+
   Future<http.Response> _checkAuth(http.Response response) async {
     if (response.statusCode == 401) {
-      developer.log('Received 401, logging out user');
-      await logout();
-      if (on401Redirect != null) {
-        on401Redirect!();
-      }
+      await handleUnauthorized();
       throw AuthException('Session expired');
     }
     return response;
   }
 
+  Future<String?> resolveGroupImageUrl({
+    required String groupId,
+    String? groupImageUrl,
+  }) async {
+    if (_token == null) return null;
+
+    final cached = await CacheService.instance.getCachedGroupImage(groupId);
+    final storagePath = cached?.filePath ?? groupImageUrl;
+    if (storagePath == null || storagePath.isEmpty) return null;
+
+    if (kIsWeb) {
+      try {
+        return await generateImage(storagePath);
+      } catch (e) {
+        developer.log('Failed to resolve group image on web: $e');
+        return null;
+      }
+    }
+
+    final localPath = cached?.localPath;
+    if (localPath != null &&
+        localPath.isNotEmpty &&
+        !localPath.startsWith('http')) {
+      return localPath;
+    }
+
+    try {
+      return await generateImage(storagePath);
+    } catch (e) {
+      developer.log('Failed to resolve group image: $e');
+      return null;
+    }
+  }
+
+  static String? _normalizeStoredToken(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    var token = raw.trim();
+    if (token.toLowerCase().startsWith('bearer ')) {
+      token = token.substring(7).trim();
+    }
+    return token.isEmpty ? null : token;
+  }
+
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString(_tokenKey);
+    _token = _normalizeStoredToken(prefs.getString(_tokenKey));
     final userJson = prefs.getString(_userKey);
     if (userJson != null) {
-      _currentUser = _userFromJson(jsonDecode(userJson));
+      try {
+        _currentUser = _userFromJson(
+          jsonDecode(userJson) as Map<String, dynamic>,
+        );
+      } catch (e) {
+        developer.log('Failed to restore cached user: $e');
+      }
+    }
+    if (_token != null && _token != prefs.getString(_tokenKey)) {
+      await prefs.setString(_tokenKey, _token!);
     }
   }
 
@@ -157,12 +218,13 @@ class AuthService {
     }
   }
 
-  Future<void> logout() async {
-    if (_token != null) {
+  Future<void> logout({bool notifyServer = true}) async {
+    final token = _token;
+    if (notifyServer && token != null) {
       try {
         await http.post(
           Uri.parse('${ApiConstants.baseUrl}${ApiConstants.signout}'),
-          headers: {'Authorization': 'Bearer ${_token!.trim()}'},
+          headers: {'Authorization': 'Bearer ${token.trim()}'},
         );
       } catch (e) {
         developer.log('Logout API call failed: $e');
@@ -647,6 +709,10 @@ class AuthService {
       headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
 
+    if (response.statusCode == 401) {
+      await _checkAuth(response);
+    }
+
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       final messages = data.map((item) => Message.fromJson(item)).toList();
@@ -752,6 +818,10 @@ class AuthService {
       ),
       headers: {'Authorization': 'Bearer ${_token!.trim()}'},
     );
+
+    if (response.statusCode == 401) {
+      await _checkAuth(response);
+    }
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);

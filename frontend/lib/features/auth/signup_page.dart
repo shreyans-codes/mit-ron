@@ -5,7 +5,7 @@ import '../../services/auth_exception.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/mitron_brand_header.dart';
 import '../../widgets/theme_picker_button.dart';
-import '../shell/placeholder_home_page.dart';
+import '../shell/main_shell_page.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -56,10 +56,8 @@ class _SignUpPageState extends State<SignUpPage> {
         _password.text,
       );
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(
-          builder: (_) => PlaceholderHomePage(session: session),
-        ),
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        MainShellPage.routeName,
         (route) => false,
       );
     } on AuthException catch (e) {

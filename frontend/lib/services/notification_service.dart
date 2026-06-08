@@ -235,8 +235,7 @@ class NotificationService {
     );
 
     if (response.statusCode == 401) {
-      debugPrint('Received 401, redirecting to login');
-      await AuthService.instance.logout();
+      await AuthService.instance.handleUnauthorized();
       return;
     }
 
@@ -261,8 +260,7 @@ class NotificationService {
     );
 
     if (response.statusCode == 401) {
-      debugPrint('Received 401 in getUnreadCount, redirecting to login');
-      await AuthService.instance.logout();
+      await AuthService.instance.handleUnauthorized();
       return 0;
     }
 
@@ -286,8 +284,7 @@ class NotificationService {
     );
 
     if (response.statusCode == 401) {
-      debugPrint('Received 401 in markAsRead, redirecting to login');
-      await AuthService.instance.logout();
+      await AuthService.instance.handleUnauthorized();
       return;
     }
 
@@ -313,8 +310,7 @@ class NotificationService {
     );
 
     if (response.statusCode == 401) {
-      debugPrint('Received 401 in markAllAsRead, redirecting to login');
-      await AuthService.instance.logout();
+      await AuthService.instance.handleUnauthorized();
       return;
     }
 

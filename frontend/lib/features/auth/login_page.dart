@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/mitron_colors.dart';
@@ -6,7 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/mitron_brand_header.dart';
 import '../../widgets/theme_picker_button.dart';
-import '../shell/placeholder_home_page.dart';
+import '../shell/main_shell_page.dart';
 import 'signup_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -38,16 +39,16 @@ class _LoginPageState extends State<LoginPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      final session = await _auth.login(_email.text, _password.text);
+      await _auth.login(_email.text, _password.text);
 
-      // Register FCM token after successful login
-      await NotificationService.instance.registerFcmTokenIfLoggedIn();
+      if (!kIsWeb) {
+        await NotificationService.instance.registerFcmTokenIfLoggedIn();
+      }
 
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => PlaceholderHomePage(session: session),
-        ),
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        MainShellPage.routeName,
+        (route) => false,
       );
     } on AuthException catch (e) {
       if (!mounted) return;

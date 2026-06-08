@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../models/message.dart';
 import '../../models/poll.dart';
+import '../../widgets/mitron_icons.dart';
+import '../../widgets/poll_option_indicator.dart';
 
 class PollMessageBubble extends StatelessWidget {
   const PollMessageBubble({
@@ -28,23 +30,11 @@ class PollMessageBubble extends StatelessWidget {
     final scheme = theme.colorScheme;
     final totalVotes = poll.totalVotes;
 
-    final bubbleColor = isSelected
-        ? scheme.tertiaryContainer
-        : isMe
-        ? scheme.primary
-        : scheme.surfaceContainerHighest;
-
-    final primaryTextColor = isMe ? scheme.onPrimary : scheme.onSurface;
-    final secondaryTextColor = isMe
-        ? scheme.onPrimary.withValues(alpha: 0.85)
-        : scheme.onSurfaceVariant;
-    final iconColor = isMe ? scheme.onPrimary : scheme.primary;
-    final optionBg = isMe
-        ? scheme.onPrimary.withValues(alpha: 0.12)
-        : scheme.surfaceContainerHigh;
-    final optionFill = isMe
-        ? scheme.onPrimary.withValues(alpha: 0.28)
-        : scheme.primaryContainer;
+    final bubbleColor = scheme.surfaceContainerHighest;
+    final primaryTextColor = scheme.onSurface;
+    final secondaryTextColor = scheme.onSurfaceVariant;
+    final accentColor = scheme.onSurface.withValues(alpha: 0.55);
+    final optionFill = scheme.primary.withValues(alpha: 0.12);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -68,20 +58,17 @@ class PollMessageBubble extends StatelessWidget {
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.sizeOf(context).width * 0.85,
               ),
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
               decoration: BoxDecoration(
                 color: bubbleColor,
-                borderRadius: BorderRadius.circular(16),
-                border: isMe
-                    ? null
-                    : Border.all(color: scheme.outlineVariant),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.poll_outlined, size: 20, color: iconColor),
+                      Icon(MitronIcons.poll, size: 18, color: accentColor),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -112,34 +99,24 @@ class PollMessageBubble extends StatelessWidget {
                         ? 0.0
                         : option.voteCount / totalVotes;
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.only(bottom: 6),
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(8),
                           onTap: () => onVote(option.id),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: optionBg,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: selected
-                                    ? iconColor
-                                    : (isMe
-                                          ? scheme.onPrimary.withValues(
-                                              alpha: 0.35,
-                                            )
-                                          : scheme.outline),
-                                width: selected ? 2 : 1,
-                              ),
-                            ),
-                            clipBehavior: Clip.antiAlias,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
                             child: Stack(
                               children: [
+                                Container(
+                                  height: 40,
+                                  color: scheme.surface.withValues(alpha: 0.5),
+                                ),
                                 FractionallySizedBox(
                                   widthFactor: fraction.clamp(0.0, 1.0),
                                   child: Container(
-                                    height: 44,
+                                    height: 40,
                                     color: optionFill,
                                   ),
                                 ),
@@ -150,22 +127,17 @@ class PollMessageBubble extends StatelessWidget {
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(
-                                        poll.isMultipleChoice
-                                            ? (selected
-                                                  ? Icons.check_box
-                                                  : Icons.check_box_outline_blank)
-                                            : (selected
-                                                  ? Icons.radio_button_checked
-                                                  : Icons.radio_button_off),
-                                        size: 22,
-                                        color: iconColor,
+                                      PollOptionIndicator(
+                                        selected: selected,
+                                        multiple: poll.isMultipleChoice,
+                                        color: accentColor,
                                       ),
-                                      const SizedBox(width: 8),
+                                      const SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
                                           option.optionText,
-                                          style: TextStyle(
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
                                             color: primaryTextColor,
                                             fontWeight: selected
                                                 ? FontWeight.w600
@@ -176,7 +148,9 @@ class PollMessageBubble extends StatelessWidget {
                                       Text(
                                         '${option.voteCount}',
                                         style: theme.textTheme.labelSmall
-                                            ?.copyWith(color: secondaryTextColor),
+                                            ?.copyWith(
+                                          color: secondaryTextColor,
+                                        ),
                                       ),
                                     ],
                                   ),

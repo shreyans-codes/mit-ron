@@ -11,22 +11,24 @@ import '../auth/login_page.dart';
 import 'update_profile_page.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.shellMode = false});
 
   static const String routeName = '/settings';
+
+  final bool shellMode;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  late AuthUser _user;
+  AuthUser? _user;
   bool _notificationsEnabled = false;
 
   @override
   void initState() {
     super.initState();
-    _user = AuthService.instance.currentUser!;
+    _user = AuthService.instance.currentUser;
     _checkNotificationStatus();
   }
 
@@ -77,12 +79,14 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final mc = MitronColors.of(context);
+    final user = _user ?? AuthService.instance.currentUser;
+    if (user == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-    return Scaffold(
-      appBar: MitronAppBar(title: 'Settings'),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        children: [
+    final body = ListView(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      children: [
           _SectionHeader(title: 'Notifications', mc: mc),
           ListTile(
             onTap: _notificationsEnabled ? null : _enableNotifications,
@@ -147,7 +151,7 @@ class _SettingsPageState extends State<SettingsPage> {
             leading: const Icon(Icons.person_outline_rounded),
             title: const Text('Update Profile'),
             subtitle: Text(
-              '@${_user.username} · Change name and profile picture',
+              '@${user.username} · Change name and profile picture',
             ),
             trailing: const Icon(Icons.chevron_right_rounded),
           ),
@@ -165,7 +169,13 @@ class _SettingsPageState extends State<SettingsPage> {
           const Center(child: AppVersionFooter()),
           const SizedBox(height: 24),
         ],
-      ),
+    );
+
+    if (widget.shellMode) return body;
+
+    return Scaffold(
+      appBar: MitronAppBar(title: 'Settings'),
+      body: body,
     );
   }
 }

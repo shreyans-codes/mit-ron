@@ -9,9 +9,11 @@ import '../users/search/user_search_page.dart';
 import '../users/profile/user_profile_page.dart';
 
 class FriendsListPage extends StatefulWidget {
-  const FriendsListPage({super.key});
+  const FriendsListPage({super.key, this.shellMode = false});
 
   static const routeName = '/friends';
+
+  final bool shellMode;
 
   @override
   State<FriendsListPage> createState() => _FriendsListPageState();
@@ -106,6 +108,14 @@ class _FriendsListPageState extends State<FriendsListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final body = _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _errorMessage != null
+        ? Center(child: Text('Error: $_errorMessage'))
+        : _buildBody();
+
+    if (widget.shellMode) return body;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Friends'),
@@ -118,11 +128,7 @@ class _FriendsListPageState extends State<FriendsListPage> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-          ? Center(child: Text('Error: $_errorMessage'))
-          : _buildBody(),
+      body: body,
     );
   }
 

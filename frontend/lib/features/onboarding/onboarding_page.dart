@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/mitron_colors.dart';
 import '../../services/notification_service.dart';
-import '../shell/placeholder_home_page.dart';
+import '../shell/main_shell_page.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -21,7 +21,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     await NotificationService.instance.setOnboardingComplete();
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => const PlaceholderHomePage()),
+        MaterialPageRoute<void>(builder: (_) => const MainShellPage()),
       );
     }
   }
@@ -30,7 +30,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     await NotificationService.instance.setOnboardingComplete();
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => const PlaceholderHomePage()),
+        MaterialPageRoute<void>(builder: (_) => const MainShellPage()),
       );
     }
   }
